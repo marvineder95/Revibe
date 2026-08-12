@@ -75,7 +75,7 @@ include PARTIALS_PATH . 'header.php';
                     <div class="detail-price-value"><?php echo formatPrice($jukebox['price_day']); ?></div>
                 </div>
                 
-                <?php include PARTIALS_PATH . 'date-selector.php'; ?>
+                <?php $dsShowModal = false; include PARTIALS_PATH . 'date-selector.php'; ?>
 
                 <!-- Actions -->
                 <div class="detail-actions">

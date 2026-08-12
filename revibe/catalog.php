@@ -312,7 +312,7 @@ include PARTIALS_PATH . 'header.php';
         </form>
 
         <?php if (!empty($jukeboxes)): ?>
-        <?php include PARTIALS_PATH . 'date-selector.php'; ?>
+        <?php $dsShowModal = true; include PARTIALS_PATH . 'date-selector.php'; ?>
         <div class="jukebox-grid">
             <?php foreach ($jukeboxes as $jukebox): ?>
             <article class="jukebox-card reveal">

@@ -178,59 +178,215 @@ function updateInquiryBadge() {
 
 // Datums-Selektor initialisieren (Katalog / Detailseite)
 function initDateSelector() {
-    const wrapper = document.querySelector('.date-selector');
-    if (!wrapper) return;
+    const inlineWrapper = document.querySelector('.date-selector');
+    if (!inlineWrapper) return;
 
-    const input = wrapper.querySelector('.date-selector-input');
-    const startInput = wrapper.querySelector('.date-selector-start');
-    const endInput = wrapper.querySelector('.date-selector-end');
-    const statusEl = wrapper.querySelector('.date-selector-status');
-    if (!input || !startInput || !endInput) return;
+    const modalOverlay = document.getElementById('date-modal-overlay');
+    const modalInput = modalOverlay ? modalOverlay.querySelector('.date-modal-input') : null;
+    const modalStart = modalOverlay ? modalOverlay.querySelector('.date-modal-start') : null;
+    const modalEnd = modalOverlay ? modalOverlay.querySelector('.date-modal-end') : null;
+    const modalSkipBtn = modalOverlay ? modalOverlay.querySelector('#date-modal-skip') : null;
+    const modalViewBtn = modalOverlay ? modalOverlay.querySelector('#date-modal-view') : null;
+
+    const inlineInput = inlineWrapper.querySelector('.date-selector-input');
+    const inlineStart = inlineWrapper.querySelector('.date-selector-start');
+    const inlineEnd = inlineWrapper.querySelector('.date-selector-end');
+    const inlineStatus = inlineWrapper.querySelector('.date-selector-status');
+
+    if (!inlineInput || !inlineStart || !inlineEnd) return;
 
     const lang = document.documentElement.lang || 'de';
-    const defaultDates = startInput.value ? (endInput.value && endInput.value !== startInput.value ? [startInput.value, endInput.value] : startInput.value) : null;
+    const flatpickrLocale = lang === 'de' ? 'de' : 'en';
+
+    function isoToDisplay(iso) {
+        if (!iso) return '';
+        const parts = iso.split('-');
+        if (parts.length !== 3) return iso;
+        return parts[2] + '.' + parts[1] + '.' + parts[0];
+    }
+
+    function displayToIso(display) {
+        if (!display) return '';
+        const ts = Date.parse(display.split('.').reverse().join('-'));
+        if (isNaN(ts)) return '';
+        const d = new Date(ts);
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    function formatDateLocal(date) {
+        const d = date.getDate().toString().padStart(2, '0');
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const y = date.getFullYear();
+        return d + '.' + m + '.' + y;
+    }
+
+    function saveDates(start, end) {
+        const finalEnd = end || start;
+        inlineStart.value = start;
+        inlineEnd.value = finalEnd;
+        if (modalStart) modalStart.value = start;
+        if (modalEnd) modalEnd.value = finalEnd;
+        updateDateDisplay(start, finalEnd);
+
+        if (!start || !finalEnd) return Promise.resolve({ success: false });
+
+        return fetch('includes/ajax.php?action=setCartDates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'date_start=' + encodeURIComponent(start) + '&date_end=' + encodeURIComponent(finalEnd)
+        }).then(r => r.json());
+    }
+
+    function updateDateDisplay(start, end) {
+        const displayPeriod = start && end ? (start === end ? isoToDisplay(start) : isoToDisplay(start) + ' - ' + isoToDisplay(end)) : '';
+        if (inlineStatus) {
+            inlineStatus.textContent = displayPeriod || (window.catalogDateSelectorHint || 'Datumsauswahl wird für alle ausgewählten Jukeboxen verwendet.');
+        }
+        inlineWrapper.setAttribute('data-has-dates', start && end ? '1' : '0');
+        updateSelectedPeriod(displayPeriod);
+    }
+
+    function updateSelectedPeriod(displayPeriod) {
+        const periodEl = inlineWrapper.querySelector('.date-selector-period');
+        if (!periodEl) return;
+        if (displayPeriod) {
+            periodEl.querySelector('strong').textContent = displayPeriod;
+            periodEl.classList.remove('is-hidden');
+        } else {
+            periodEl.classList.add('is-hidden');
+        }
+    }
+
+    function syncToModal(start, end) {
+        if (!modalInput || !modalStart || !modalEnd) return;
+        modalStart.value = start;
+        modalEnd.value = end || start;
+        if (modalInput._flatpickr) {
+            modalInput._flatpickr.setDate(start && end ? [start, end] : (start || []), true);
+        } else {
+            modalInput.value = start && end ? (start === end ? isoToDisplay(start) : isoToDisplay(start) + ' - ' + isoToDisplay(end)) : '';
+        }
+    }
+
+    function syncToInline(start, end) {
+        if (!inlineInput || !inlineStart || !inlineEnd) return;
+        inlineStart.value = start;
+        inlineEnd.value = end || start;
+        if (inlineInput._flatpickr) {
+            inlineInput._flatpickr.setDate(start && end ? [start, end] : (start || []), true);
+        } else {
+            inlineInput.value = start && end ? (start === end ? isoToDisplay(start) : isoToDisplay(start) + ' - ' + isoToDisplay(end)) : '';
+        }
+    }
+
+    function closeModal() {
+        if (modalOverlay) modalOverlay.classList.add('is-hidden');
+    }
+
+    function onFlatpickrChange(selectedDates, dateStr, instance) {
+        const start = selectedDates[0] ? formatDateLocal(selectedDates[0]) : '';
+        const end = selectedDates[1] ? formatDateLocal(selectedDates[1]) : '';
+        const startIso = start ? displayToIso(start) : '';
+        const endIso = end ? displayToIso(end) : '';
+
+        const isModal = instance.element.classList.contains('date-modal-input');
+        if (isModal) {
+            syncToInline(startIso, endIso);
+        } else {
+            syncToModal(startIso, endIso);
+        }
+
+        if (startIso && endIso) {
+            const status = isModal ? null : inlineStatus;
+            if (status) status.textContent = window.catalogDateSavingText || 'Mietzeitraum wird gespeichert ...';
+            saveDates(startIso, endIso).then(data => {
+                if (data.success) {
+                    if (isModal && modalOverlay) {
+                        closeModal();
+                    }
+                    if (status) status.textContent = window.catalogDateSavedText || 'Mietzeitraum gespeichert.';
+                } else if (status) {
+                    status.textContent = 'Fehler beim Speichern.';
+                }
+            }).catch(() => {
+                if (status) status.textContent = 'Fehler beim Speichern.';
+            });
+        }
+    }
 
     if (typeof flatpickr !== 'undefined') {
-        flatpickr(input, {
+        const defaultStart = inlineStart.value ? isoToDisplay(inlineStart.value) : '';
+        const defaultEnd = inlineEnd.value ? isoToDisplay(inlineEnd.value) : '';
+        const defaultInline = defaultStart && defaultEnd ? (defaultStart === defaultEnd ? defaultStart : [defaultStart, defaultEnd]) : null;
+        const defaultModal = defaultInline;
+
+        flatpickr(inlineInput, {
             mode: 'range',
             minDate: 'today',
             dateFormat: 'd.m.Y',
-            locale: lang === 'de' ? 'de' : 'en',
+            locale: flatpickrLocale,
             allowInput: true,
-            defaultDate: defaultDates,
-            onChange: function(selectedDates, dateStr) {
-                const start = selectedDates[0] ? formatDateLocal(selectedDates[0]) : '';
-                const end = selectedDates[1] ? formatDateLocal(selectedDates[1]) : '';
-                startInput.value = start;
-                endInput.value = end || start;
+            defaultDate: defaultInline,
+            onChange: onFlatpickrChange
+        });
 
+        if (modalInput) {
+            flatpickr(modalInput, {
+                mode: 'range',
+                minDate: 'today',
+                dateFormat: 'd.m.Y',
+                locale: flatpickrLocale,
+                allowInput: true,
+                defaultDate: defaultModal,
+                onChange: onFlatpickrChange
+            });
+        }
+    }
+
+    // Modal-Buttons
+    if (modalOverlay) {
+        if (modalSkipBtn) {
+            modalSkipBtn.addEventListener('click', closeModal);
+        }
+        if (modalViewBtn) {
+            modalViewBtn.addEventListener('click', function() {
+                const start = modalStart ? modalStart.value : '';
+                const end = modalEnd ? modalEnd.value : '';
                 if (start && end) {
-                    if (statusEl) statusEl.textContent = window.catalogDateSavingText || 'Mietzeitraum wird gespeichert ...';
-                    fetch('includes/ajax.php?action=setCartDates', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: 'date_start=' + encodeURIComponent(start) + '&date_end=' + encodeURIComponent(end)
-                    })
-                        .then(r => r.json())
-                        .then(data => {
-                            if (data.success && statusEl) {
-                                statusEl.textContent = window.catalogDateSavedText || 'Mietzeitraum gespeichert.';
-                            }
-                        })
-                        .catch(() => {
-                            if (statusEl) statusEl.textContent = 'Fehler beim Speichern.';
-                        });
+                    saveDates(start, end);
                 }
-            }
+                closeModal();
+            });
+        }
+        // Klick auf Backdrop schließt ebenfalls
+        modalOverlay.addEventListener('click', function(e) {
+            if (e.target === modalOverlay) closeModal();
         });
     }
+
+    initInfoBubbles();
 }
 
-function formatDateLocal(date) {
-    const d = date.getDate().toString().padStart(2, '0');
-    const m = (date.getMonth() + 1).toString().padStart(2, '0');
-    const y = date.getFullYear();
-    return d + '.' + m + '.' + y;
+// Info-Bubbles (Tooltip mit i-Icon) initialisieren
+function initInfoBubbles() {
+    document.querySelectorAll('.info-bubble').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const tooltip = this.parentElement.querySelector('.info-tooltip');
+            if (!tooltip) return;
+            const isOpen = tooltip.classList.contains('is-visible');
+            document.querySelectorAll('.info-tooltip').forEach(t => t.classList.remove('is-visible'));
+            document.querySelectorAll('.info-bubble').forEach(b => b.setAttribute('aria-expanded', 'false'));
+            if (!isOpen) {
+                tooltip.classList.add('is-visible');
+                this.setAttribute('aria-expanded', 'true');
+            }
+        });
+    });
+    document.addEventListener('click', function() {
+        document.querySelectorAll('.info-tooltip').forEach(t => t.classList.remove('is-visible'));
+        document.querySelectorAll('.info-bubble').forEach(b => b.setAttribute('aria-expanded', 'false'));
+    });
 }
 
 // Aktuellen Mietzeitraum aus dem Datums-Selektor holen
