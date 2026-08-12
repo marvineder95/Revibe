@@ -1,0 +1,24 @@
+.DS_Store
+Thumbs.db
+
+/uploads/**
+!/uploads/.htaccess
+!/uploads/**/.gitkeep
+
+/data/**
+!/data/**/.gitkeep
+
+/config/local.php
+/config/secrets.php
+.env
+.env.local
+
+*.zip
+*.tar
+*.tar.gz
+
+# Lokale Logs und temporäre Dateien
+*.log
+*.tmp
+.cache/.playwright-mcp/
+test-results/

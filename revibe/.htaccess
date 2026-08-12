@@ -1,0 +1,77 @@
+# Revibe - Apache Konfiguration
+
+# Charset
+AddDefaultCharset UTF-8
+
+# PHP-Einstellungen (falls erlaubt)
+php_value upload_max_filesize 5M
+php_value post_max_size 5M
+php_value max_execution_time 300
+
+# Kompression aktivieren
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json
+</IfModule>
+
+# Browser-Caching
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpg "access plus 1 year"
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/webp "access plus 1 year"
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+</IfModule>
+
+# Verzeichnisauflistung deaktivieren
+Options -Indexes
+
+# Sicherheit: Zugriff auf sensible Dateien verweigern
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+<FilesMatch "\.(json|log|md)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Zugriff auf config- und includes-Verzeichnis verweigern
+RedirectMatch 403 ^/config/.*$
+RedirectMatch 403 ^/includes/.*$
+RedirectMatch 403 ^/data/.*$
+
+# PHP-Ausführung in Uploads-Verzeichnis verhindern
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} ^/uploads/.*$ [NC]
+    RewriteRule \.(php|php\.|php3|php4|php5|phtml|pl|py|jsp|asp|aspx|cgi|sh|bash)$ - [F,L,NC]
+</IfModule>
+
+<IfModule mod_php.c>
+    <Directory "^/uploads/">
+        php_flag engine off
+    </Directory>
+</IfModule>
+
+# Sicherheits-Header
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "DENY"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+</IfModule>
+
+# Fehlerseiten
+ErrorDocument 404 /404.php
+ErrorDocument 403 /403.php
+
+# HTTPS-Weiterleitung (optional - bei vorhandenem SSL-Zertifikat aktivieren)
+# <IfModule mod_rewrite.c>
+#     RewriteEngine On
+#     RewriteCond %{HTTPS} off
+#     RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+# </IfModule>
