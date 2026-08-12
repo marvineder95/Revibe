@@ -41,8 +41,8 @@ if (session_status() === PHP_SESSION_NONE) {
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 
-// Basis-URL der Webseite
-define('BASE_URL', '');
+// Basis-URL der Webseite (automatisch aus Protokoll + Host, mit abschließendem Slash)
+define('BASE_URL', $protocol . '://' . $host . '/');
 
 // Physische Pfade
 define('ROOT_PATH', dirname(__DIR__) . '/');

@@ -258,12 +258,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                                     if ($realOfferPdfPath !== false && $realPdfBasePath !== false && strpos($realOfferPdfPath, $realPdfBasePath) === 0 && file_exists($realOfferPdfPath)) {
                                         $custSubject = __('admin_offer_email_subject', ['company' => COMPANY_NAME]);
-                                        $custBody = __('admin_offer_email_body', [
+                                        $offerHtmlBody = __('admin_offer_email_body', [
                                             'name' => $name,
-                                            'link' => $offerLink,
+                                            'offer_link' => $offerLink,
                                             'valid_until' => date('d.m.Y', strtotime($offer['valid_until'])),
                                             'company' => COMPANY_NAME
-                                        ]) . "\n";
+                                        ]);
+                                        $offerPlainBody = "Hallo {$name},\n\nvielen Dank für Ihre Anfrage. Im Anhang finden Sie Ihr unverbindliches Angebot.\n\nSie können das Angebot online einsehen und annehmen oder ablehnen:\n{$offerLink}\n\nDas Angebot ist gültig bis " . date('d.m.Y', strtotime($offer['valid_until'])) . ".\n\nMit freundlichen Grüßen\n" . COMPANY_NAME . " Team";
 
                                         $custHeaders = "From: " . MAIL_SENDER . "\r\n";
                                         $custHeaders .= "Reply-To: " . MAIL_SENDER . "\r\n";
@@ -273,20 +274,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         $pdfEncoded = chunk_split(base64_encode($pdfContent));
                                         $pdfFilename = basename($realOfferPdfPath);
 
-                                        $boundary = bin2hex(random_bytes(16));
+                                        $outerBoundary = bin2hex(random_bytes(16));
+                                        $innerBoundary = bin2hex(random_bytes(16));
                                         $custHeaders .= "MIME-Version: 1.0\r\n";
-                                        $custHeaders .= "Content-Type: multipart/mixed; boundary=\"$boundary\"\r\n";
+                                        $custHeaders .= "Content-Type: multipart/mixed; boundary=\"{$outerBoundary}\"\r\n";
 
-                                        $custBodyMime = "--$boundary\r\n";
+                                        $custBodyMime = "--{$outerBoundary}\r\n";
+                                        $custBodyMime .= "Content-Type: multipart/alternative; boundary=\"{$innerBoundary}\"\r\n\r\n";
+
+                                        $custBodyMime .= "--{$innerBoundary}\r\n";
                                         $custBodyMime .= "Content-Type: text/plain; charset=UTF-8\r\n";
                                         $custBodyMime .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
-                                        $custBodyMime .= $custBody . "\r\n";
-                                        $custBodyMime .= "--$boundary\r\n";
-                                        $custBodyMime .= "Content-Type: application/pdf; name=\"$pdfFilename\"\r\n";
+                                        $custBodyMime .= $offerPlainBody . "\r\n\r\n";
+
+                                        $custBodyMime .= "--{$innerBoundary}\r\n";
+                                        $custBodyMime .= "Content-Type: text/html; charset=UTF-8\r\n";
+                                        $custBodyMime .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
+                                        $custBodyMime .= $offerHtmlBody . "\r\n\r\n";
+                                        $custBodyMime .= "--{$innerBoundary}--\r\n\r\n";
+
+                                        $custBodyMime .= "--{$outerBoundary}\r\n";
+                                        $custBodyMime .= "Content-Type: application/pdf; name=\"{$pdfFilename}\"\r\n";
                                         $custBodyMime .= "Content-Transfer-Encoding: base64\r\n";
-                                        $custBodyMime .= "Content-Disposition: attachment; filename=\"$pdfFilename\"\r\n\r\n";
+                                        $custBodyMime .= "Content-Disposition: attachment; filename=\"{$pdfFilename}\"\r\n\r\n";
                                         $custBodyMime .= $pdfEncoded . "\r\n";
-                                        $custBodyMime .= "--$boundary--";
+                                        $custBodyMime .= "--{$outerBoundary}--";
 
                                         $offerMailSent = mail($email, $custSubject, $custBodyMime, $custHeaders);
                                         if (!$offerMailSent) {

@@ -126,10 +126,11 @@ function sendInvoiceEmail($inquiry, $invoice, $offer) {
     }
 
     $subject = __('admin_invoice_email_subject', ['company' => COMPANY_NAME]);
-    $body = __('admin_invoice_email_body', [
+    $htmlBody = __('admin_invoice_email_body', [
         'name' => $name,
         'company' => COMPANY_NAME
-    ]) . "\n";
+    ]);
+    $plainBody = "Hallo {$name},\n\nvielen Dank für die Annahme unseres Angebots. Im Anhang finden Sie Ihre Rechnung.\n\nBitte überweisen Sie den Betrag innerhalb von 14 Tagen auf das in der Rechnung angegebene Konto.\n\nMit freundlichen Grüßen\n" . COMPANY_NAME . " Team";
 
     $headers = "From: " . MAIL_SENDER . "\r\n";
     $headers .= "Reply-To: " . MAIL_SENDER . "\r\n";
@@ -138,20 +139,31 @@ function sendInvoiceEmail($inquiry, $invoice, $offer) {
     $pdfEncoded = chunk_split(base64_encode($pdfContent));
     $pdfFilename = basename($realPdfPath);
 
-    $boundary = bin2hex(random_bytes(16));
+    $outerBoundary = bin2hex(random_bytes(16));
+    $innerBoundary = bin2hex(random_bytes(16));
     $headers .= "MIME-Version: 1.0\r\n";
-    $headers .= "Content-Type: multipart/mixed; boundary=\"$boundary\"\r\n";
+    $headers .= "Content-Type: multipart/mixed; boundary=\"{$outerBoundary}\"\r\n";
 
-    $bodyMime = "--$boundary\r\n";
+    $bodyMime = "--{$outerBoundary}\r\n";
+    $bodyMime .= "Content-Type: multipart/alternative; boundary=\"{$innerBoundary}\"\r\n\r\n";
+
+    $bodyMime .= "--{$innerBoundary}\r\n";
     $bodyMime .= "Content-Type: text/plain; charset=UTF-8\r\n";
     $bodyMime .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
-    $bodyMime .= $body . "\r\n";
-    $bodyMime .= "--$boundary\r\n";
-    $bodyMime .= "Content-Type: application/pdf; name=\"$pdfFilename\"\r\n";
+    $bodyMime .= $plainBody . "\r\n\r\n";
+
+    $bodyMime .= "--{$innerBoundary}\r\n";
+    $bodyMime .= "Content-Type: text/html; charset=UTF-8\r\n";
+    $bodyMime .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
+    $bodyMime .= $htmlBody . "\r\n\r\n";
+    $bodyMime .= "--{$innerBoundary}--\r\n\r\n";
+
+    $bodyMime .= "--{$outerBoundary}\r\n";
+    $bodyMime .= "Content-Type: application/pdf; name=\"{$pdfFilename}\"\r\n";
     $bodyMime .= "Content-Transfer-Encoding: base64\r\n";
-    $bodyMime .= "Content-Disposition: attachment; filename=\"$pdfFilename\"\r\n\r\n";
+    $bodyMime .= "Content-Disposition: attachment; filename=\"{$pdfFilename}\"\r\n\r\n";
     $bodyMime .= $pdfEncoded . "\r\n";
-    $bodyMime .= "--$boundary--";
+    $bodyMime .= "--{$outerBoundary}--";
 
     return mail($email, $subject, $bodyMime, $headers);
 }

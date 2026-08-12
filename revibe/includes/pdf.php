@@ -284,10 +284,10 @@ class RevibePdf extends TCPDF {
         // Hintergrundbox
         $startY = $this->GetY();
         $this->SetFillColor(REVIBE_CREAM[0], REVIBE_CREAM[1], REVIBE_CREAM[2]);
-        $this->Rect(15, $startY, 180, 30, 'F');
+        $this->Rect(15, $startY, 180, 40, 'F');
         $this->SetDrawColor(REVIBE_BLUE[0], REVIBE_BLUE[1], REVIBE_BLUE[2]);
         $this->SetLineWidth(0.5);
-        $this->Rect(15, $startY, 180, 30, 'D');
+        $this->Rect(15, $startY, 180, 40, 'D');
 
         $this->SetY($startY + 4);
         $this->SetFont('dejavusans', 'B', 10);
