@@ -22,36 +22,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !validateCsrfToken($_POST['csrf_tok
     }
     
     $lang = getCurrentLanguage();
-    ?>
-<!DOCTYPE html>
-<html lang="<?php echo e($lang); ?>">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo __('admin_delete_jukebox'); ?> | <?php echo COMPANY_NAME; ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?php echo ASSETS_URL; ?>css/style.css">
-</head>
-<body class="admin-body">
-    <div class="admin-app">
-        <?php require_once ROOT_PATH . 'partials/admin-sidebar.php'; ?>
+    $pageTitle = __('admin_delete_jukebox');
 
-        <div class="admin-content">
-            <header class="admin-topbar">
-                <button type="button" class="admin-mobile-toggle" onclick="openAdminSidebar()" aria-label="Menü">☰</button>
-                <a href="/admin/dashboard.php" class="admin-sidebar-logo">
-                    <?php if (file_exists(ROOT_PATH . 'assets/images/RevibeLogoPdf.png')): ?>
-                    <img src="<?php echo ASSETS_URL; ?>images/RevibeLogoPdf.png" alt="<?php echo e(COMPANY_NAME); ?>" style="height: 28px;">
-                    <?php else: ?>
-                    <span><?php echo e(COMPANY_NAME); ?></span>
-                    <?php endif; ?>
-                </a>
-                <a href="/admin/logout.php" class="btn btn-dark btn-sm"><?php echo __('admin_logout'); ?></a>
-            </header>
-
-            <main class="admin-main">
+    include PARTIALS_PATH . 'admin-header.php';
+?>
             <div class="admin-card" style="max-width: 500px; margin: 0 auto;">
                 <div class="admin-card-body" style="text-align: center;">
                     <div style="font-size: 4rem; margin-bottom: var(--space-4);">⚠️</div>
@@ -71,25 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !validateCsrfToken($_POST['csrf_tok
                     </form>
                 </div>
             </div>
-            </main>
-        </div>
-    </div>
 
-    <script>
-        function openAdminSidebar() {
-            document.getElementById('adminSidebar').classList.add('active');
-            document.getElementById('adminOverlay').classList.add('active');
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeAdminSidebar() {
-            document.getElementById('adminSidebar').classList.remove('active');
-            document.getElementById('adminOverlay').classList.remove('active');
-            document.body.style.overflow = '';
-        }
-    </script>
-</body>
-</html>
+<?php include PARTIALS_PATH . 'admin-footer.php'; ?>
     <?php
     exit;
 }

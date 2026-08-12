@@ -36,39 +36,14 @@ $invoices = getAllInvoices();
 $totalRevenue = getTotalRevenue();
 $openRevenue = getOpenRevenue();
 $lang = getCurrentLanguage();
+$pageTitle = __('admin_invoices_title');
 
 // Zusätzliche Erfolgs-/Fehlermeldungen
 $langTranslations = getTranslations($lang);
+
+include PARTIALS_PATH . 'admin-header.php';
 ?>
-<!DOCTYPE html>
-<html lang="<?php echo $lang; ?>">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo __('admin_invoices_title'); ?> | <?php echo COMPANY_NAME; ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?php echo ASSETS_URL; ?>css/style.css">
-</head>
-<body class="admin-body">
-    <div class="admin-app">
-        <?php require_once ROOT_PATH . 'partials/admin-sidebar.php'; ?>
 
-        <div class="admin-content">
-            <header class="admin-topbar">
-                <button type="button" class="admin-mobile-toggle" onclick="openAdminSidebar()" aria-label="Menü">☰</button>
-                <a href="/admin/dashboard.php" class="admin-sidebar-logo">
-                    <?php if (file_exists(ROOT_PATH . 'assets/images/RevibeLogoPdf.png')): ?>
-                    <img src="<?php echo ASSETS_URL; ?>images/RevibeLogoPdf.png" alt="<?php echo e(COMPANY_NAME); ?>" style="height: 28px;">
-                    <?php else: ?>
-                    <span><?php echo e(COMPANY_NAME); ?></span>
-                    <?php endif; ?>
-                </a>
-                <a href="/admin/logout.php" class="btn btn-dark btn-sm"><?php echo __('admin_logout'); ?></a>
-            </header>
-
-            <main class="admin-main">
             <?php if ($success): ?>
             <div style="padding: var(--space-4); background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: var(--radius-md); margin-bottom: var(--space-6);">
                 <p style="color: #22c55e; margin-bottom: 0;">
@@ -181,18 +156,4 @@ $langTranslations = getTranslations($lang);
         </div>
     </div>
 
-    <script>
-        function openAdminSidebar() {
-            document.getElementById('adminSidebar').classList.add('active');
-            document.getElementById('adminOverlay').classList.add('active');
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeAdminSidebar() {
-            document.getElementById('adminSidebar').classList.remove('active');
-            document.getElementById('adminOverlay').classList.remove('active');
-            document.body.style.overflow = '';
-        }
-    </script>
-</body>
-</html>
+<?php include PARTIALS_PATH . 'admin-footer.php'; ?>

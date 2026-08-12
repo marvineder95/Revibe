@@ -13,8 +13,6 @@ function isAdminPageActive($path) {
     return strpos($current, '/admin/' . $path) !== false;
 }
 ?>
-<!-- Mobile Overlay -->
-<div class="admin-overlay" id="adminOverlay" onclick="closeAdminSidebar()"></div>
 
 <!-- Sidebar -->
 <aside class="admin-sidebar" id="adminSidebar">
