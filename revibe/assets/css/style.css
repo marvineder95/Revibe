@@ -3319,13 +3319,24 @@ p {
 
 .date-modal {
     width: 100%;
-    max-width: 560px;
+    max-width: 720px;
     background: var(--color-white, #fff);
     border-radius: var(--radius-lg, 16px);
     padding: var(--space-6, 2rem);
     box-shadow: 0 25px 50px -12px rgba(32, 33, 33, 0.25);
     text-align: center;
     animation: date-modal-in 0.35s ease;
+}
+
+.date-modal .flatpickr-calendar {
+    margin: 0 auto;
+    box-shadow: none;
+    border: 1px solid rgba(32, 33, 33, 0.08);
+    border-radius: var(--radius-md);
+}
+
+.date-modal .flatpickr-calendar.inline {
+    display: block;
 }
 
 @keyframes date-modal-in {
@@ -3373,13 +3384,39 @@ p {
 
 .date-modal-actions {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: var(--space-3);
-    justify-content: center;
+    align-items: stretch;
+    margin-top: var(--space-5);
 }
 
 .date-modal-actions .btn {
-    min-width: 200px;
+    width: 100%;
+    min-width: auto;
+}
+
+.date-modal-actions .btn-primary {
+    order: -1;
+}
+
+.date-modal-actions .btn-text {
+    background: transparent;
+    color: var(--color-gray-500);
+    border: none;
+    box-shadow: none;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    padding: var(--space-2);
+}
+
+.date-modal-actions .btn-text::before {
+    display: none;
+}
+
+.date-modal-actions .btn-text:hover {
+    color: var(--color-text);
+    background: transparent;
+    transform: none;
 }
 
 /* Info Bubble */
@@ -3419,13 +3456,13 @@ p {
     left: 50%;
     bottom: calc(100% + 10px);
     transform: translateX(-50%);
-    width: 280px;
-    padding: var(--space-3);
+    width: 320px;
+    padding: var(--space-4);
     background: var(--color-dark);
     color: #fff;
     border-radius: var(--radius-md);
-    font-size: var(--text-sm);
-    line-height: 1.5;
+    font-size: var(--text-base);
+    line-height: 1.55;
     text-align: left;
     opacity: 0;
     visibility: hidden;
@@ -3437,12 +3474,15 @@ p {
 
 .info-tooltip strong {
     display: block;
-    margin-bottom: var(--space-1);
-    font-weight: 600;
+    margin-bottom: var(--space-2);
+    font-weight: 700;
+    font-size: var(--text-base);
+    color: #fff;
 }
 
 .info-tooltip p {
     margin: 0;
+    color: rgba(255, 255, 255, 0.95);
 }
 
 .info-tooltip::after {

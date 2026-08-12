@@ -182,7 +182,7 @@ function initDateSelector() {
     if (!inlineWrapper) return;
 
     const modalOverlay = document.getElementById('date-modal-overlay');
-    const modalInput = modalOverlay ? modalOverlay.querySelector('.date-modal-input') : null;
+    const modalCalendarEl = modalOverlay ? modalOverlay.querySelector('.date-modal-calendar') : null;
     const modalStart = modalOverlay ? modalOverlay.querySelector('.date-modal-start') : null;
     const modalEnd = modalOverlay ? modalOverlay.querySelector('.date-modal-end') : null;
     const modalSkipBtn = modalOverlay ? modalOverlay.querySelector('#date-modal-skip') : null;
@@ -258,22 +258,18 @@ function initDateSelector() {
     }
 
     function syncToModal(start, end) {
-        if (!modalInput || !modalStart || !modalEnd) return;
+        if (!modalStart || !modalEnd || !modalCalendarInstance) return;
         modalStart.value = start;
         modalEnd.value = end || start;
-        if (modalInput._flatpickr) {
-            modalInput._flatpickr.setDate(start && end ? [start, end] : (start || []), true);
-        } else {
-            modalInput.value = start && end ? (start === end ? isoToDisplay(start) : isoToDisplay(start) + ' - ' + isoToDisplay(end)) : '';
-        }
+        modalCalendarInstance.setDate(start && end ? [start, end] : (start || []), true);
     }
 
     function syncToInline(start, end) {
         if (!inlineInput || !inlineStart || !inlineEnd) return;
         inlineStart.value = start;
         inlineEnd.value = end || start;
-        if (inlineInput._flatpickr) {
-            inlineInput._flatpickr.setDate(start && end ? [start, end] : (start || []), true);
+        if (inlineCalendarInstance) {
+            inlineCalendarInstance.setDate(start && end ? [start, end] : (start || []), true);
         } else {
             inlineInput.value = start && end ? (start === end ? isoToDisplay(start) : isoToDisplay(start) + ' - ' + isoToDisplay(end)) : '';
         }
@@ -289,21 +285,17 @@ function initDateSelector() {
         const startIso = start ? displayToIso(start) : '';
         const endIso = end ? displayToIso(end) : '';
 
-        const isModal = instance.element.classList.contains('date-modal-input');
-        if (isModal) {
+        if (instance === modalCalendarInstance) {
             syncToInline(startIso, endIso);
-        } else {
+        } else if (instance === inlineCalendarInstance) {
             syncToModal(startIso, endIso);
         }
 
         if (startIso && endIso) {
-            const status = isModal ? null : inlineStatus;
+            const status = instance === inlineCalendarInstance ? inlineStatus : null;
             if (status) status.textContent = window.catalogDateSavingText || 'Mietzeitraum wird gespeichert ...';
             saveDates(startIso, endIso).then(data => {
                 if (data.success) {
-                    if (isModal && modalOverlay) {
-                        closeModal();
-                    }
                     if (status) status.textContent = window.catalogDateSavedText || 'Mietzeitraum gespeichert.';
                 } else if (status) {
                     status.textContent = 'Fehler beim Speichern.';
@@ -314,30 +306,32 @@ function initDateSelector() {
         }
     }
 
+    let inlineCalendarInstance = null;
+    let modalCalendarInstance = null;
+
     if (typeof flatpickr !== 'undefined') {
         const defaultStart = inlineStart.value ? isoToDisplay(inlineStart.value) : '';
         const defaultEnd = inlineEnd.value ? isoToDisplay(inlineEnd.value) : '';
-        const defaultInline = defaultStart && defaultEnd ? (defaultStart === defaultEnd ? defaultStart : [defaultStart, defaultEnd]) : null;
-        const defaultModal = defaultInline;
+        const defaultDates = defaultStart && defaultEnd ? (defaultStart === defaultEnd ? defaultStart : [defaultStart, defaultEnd]) : null;
 
-        flatpickr(inlineInput, {
+        inlineCalendarInstance = flatpickr(inlineInput, {
             mode: 'range',
             minDate: 'today',
             dateFormat: 'd.m.Y',
             locale: flatpickrLocale,
             allowInput: true,
-            defaultDate: defaultInline,
+            defaultDate: defaultDates,
             onChange: onFlatpickrChange
         });
 
-        if (modalInput) {
-            flatpickr(modalInput, {
+        if (modalCalendarEl) {
+            modalCalendarInstance = flatpickr(modalCalendarEl, {
                 mode: 'range',
                 minDate: 'today',
                 dateFormat: 'd.m.Y',
                 locale: flatpickrLocale,
-                allowInput: true,
-                defaultDate: defaultModal,
+                inline: true,
+                defaultDate: defaultDates,
                 onChange: onFlatpickrChange
             });
         }

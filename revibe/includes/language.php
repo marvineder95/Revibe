@@ -227,7 +227,7 @@ function getTranslations($lang = null) {
             'catalog_date_info_title' => 'Warum zuerst das Datum?',
             'catalog_date_info_text' => 'Unsere Jukeboxen sind echte Einzelstücke. Indem Sie zuerst den Mietzeitraum wählen, sehen Sie sofort, welche Boxen an Ihrem Termin noch frei sind – und vermeiden Enttäuschungen bei der Anfrage.',
             'catalog_date_skip' => 'Vorerst überspringen',
-            'catalog_date_view_all' => 'Gesamtes Sortiment ansehen',
+            'catalog_date_view_all' => 'Weiter',
             'catalog_date_selected_period' => 'Gewählter Zeitraum',
             'catalog_date_change' => 'Ändern',
 
@@ -689,7 +689,7 @@ function getTranslations($lang = null) {
             'catalog_date_info_title' => 'Why select the date first?',
             'catalog_date_info_text' => 'Our jukeboxes are unique one-off pieces. By selecting the rental period first, you immediately see which boxes are still free on your date – and avoid disappointment when inquiring.',
             'catalog_date_skip' => 'Skip for now',
-            'catalog_date_view_all' => 'View full assortment',
+            'catalog_date_view_all' => 'Continue',
             'catalog_date_selected_period' => 'Selected period',
             'catalog_date_change' => 'Change',
 

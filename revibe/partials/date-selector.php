@@ -50,14 +50,14 @@ if ($dsHasDates) {
         <p class="date-modal-intro"><?php echo __('catalog_date_modal_intro'); ?></p>
 
         <div class="date-modal-input-wrap">
-            <input type="text" class="date-modal-input form-input" value="<?php echo e($dsDefaultDates); ?>" placeholder="TT.MM.JJJJ - TT.MM.JJJJ" aria-label="<?php echo e(__('catalog_select_dates')); ?>">
+            <div class="date-modal-calendar"></div>
             <input type="hidden" class="date-modal-start" value="<?php echo e($dsCart['date_start']); ?>">
             <input type="hidden" class="date-modal-end" value="<?php echo e($dsCart['date_end']); ?>">
         </div>
 
         <div class="date-modal-actions">
-            <button type="button" class="btn btn-secondary" id="date-modal-skip"><?php echo __('catalog_date_skip'); ?></button>
-            <button type="button" class="btn btn-primary" id="date-modal-view"><?php echo __('catalog_date_view_all'); ?></button>
+            <button type="button" class="btn btn-primary btn-lg" id="date-modal-view"><?php echo __('catalog_date_view_all'); ?></button>
+            <button type="button" class="btn btn-text" id="date-modal-skip"><?php echo __('catalog_date_skip'); ?></button>
         </div>
     </div>
 </div>
