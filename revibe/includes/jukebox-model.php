@@ -9,6 +9,18 @@ require_once __DIR__ . '/database.php';
 // Konstanten
 const JUKEBOX_UPLOAD_DIR = 'jukeboxes/';
 
+if (!defined('WAREHOUSE_ADDRESS_DEFAULT')) {
+    define('WAREHOUSE_ADDRESS_DEFAULT', 'Oberstdorfer Straße 5, 2201 Seyring, Österreich');
+}
+
+const JUKEBOX_TAGS = [
+    'fully_functional' => ['color' => 'success', 'icon' => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'],
+    'lights_work' => ['color' => 'success', 'icon' => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2v1"/><path d="M12 7a5 5 0 0 0-5 5c0 2.76 2.24 5 5 5s5-2.24 5-5a5 5 0 0 0-5-5Z"/></svg>'],
+    'lights_broken' => ['color' => 'danger', 'icon' => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2v1"/><path d="M17.73 8.73 16 7"/><path d="M12 12a5 5 0 0 0-5-5"/><path d="M7.76 12.76 6.27 11.27"/></svg>'],
+    'playback_broken' => ['color' => 'danger', 'icon' => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>'],
+    'decorative' => ['color' => 'gray', 'icon' => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6.4-4.8-6.4 4.8 2.4-7.2-6-4.8h7.6Z"/></svg>']
+];
+
 // Initialisierung beim ersten Aufruf
 initDatabase();
 migrateFromJson();
@@ -79,22 +91,38 @@ function getAllJukeboxes($sortBy = 'order', $order = 'ASC', $filters = []) {
             $params = array_merge($params, $filters['category_id']);
         }
         
+        // Tags
+        if (!empty($filters['tags']) && is_array($filters['tags'])) {
+            $tagConditions = [];
+            foreach ($filters['tags'] as $tag) {
+                if (array_key_exists($tag, JUKEBOX_TAGS)) {
+                    $tagConditions[] = "tags LIKE ?";
+                    $params[] = '%"' . $tag . '"%';
+                }
+            }
+            if (!empty($tagConditions)) {
+                $whereConditions[] = '(' . implode(' OR ', $tagConditions) . ')';
+            }
+        }
+        
         $whereSql = !empty($whereConditions) ? 'WHERE ' . implode(' AND ', $whereConditions) : '';
         
         // Sichere Identifier-Quoting für SQLite
         $quotedSortBy = '`' . str_replace('`', '``', $sortBy) . '`';
-        $stmt = $db->prepare("SELECT * FROM jukeboxes $whereSql ORDER BY $quotedSortBy $order");
+        $stmt = $db->prepare("SELECT * FROM jukeboxes $whereSql ORDER BY `featured` DESC, $quotedSortBy $order");
         $stmt->execute($params);
         $jukeboxes = $stmt->fetchAll();
         
         // Gallery-Images von JSON decodieren
         foreach ($jukeboxes as &$jukebox) {
             $jukebox['gallery_images'] = json_decode($jukebox['gallery_images'] ?? '[]', true) ?: [];
+            $jukebox['tags'] = json_decode($jukebox['tags'] ?? '[]', true) ?: [];
             $jukebox['featured'] = (bool)$jukebox['featured'];
             $jukebox['new_arrival'] = (bool)$jukebox['new_arrival'];
             $jukebox['price_day'] = (float)$jukebox['price_day'];
             $jukebox['year'] = $jukebox['year'] ? (int)$jukebox['year'] : null;
             $jukebox['order'] = (int)$jukebox['order'];
+            $jukebox['weight'] = $jukebox['weight'] !== null ? (float)$jukebox['weight'] : null;
         }
         
         return $jukeboxes;
@@ -120,11 +148,13 @@ function getJukeboxById($id) {
         
         // Gallery-Images von JSON decodieren
         $jukebox['gallery_images'] = json_decode($jukebox['gallery_images'] ?? '[]', true) ?: [];
+        $jukebox['tags'] = json_decode($jukebox['tags'] ?? '[]', true) ?: [];
         $jukebox['featured'] = (bool)$jukebox['featured'];
         $jukebox['new_arrival'] = (bool)$jukebox['new_arrival'];
         $jukebox['price_day'] = (float)$jukebox['price_day'];
         $jukebox['year'] = $jukebox['year'] ? (int)$jukebox['year'] : null;
         $jukebox['order'] = (int)$jukebox['order'];
+        $jukebox['weight'] = $jukebox['weight'] !== null ? (float)$jukebox['weight'] : null;
         
         return $jukebox;
     } catch (PDOException $e) {
@@ -136,7 +166,7 @@ function getJukeboxById($id) {
 /**
  * Featured Jukeboxen laden
  */
-function getFeaturedJukeboxes($limit = 3) {
+function getFeaturedJukeboxes($limit = 3, $fillUp = true) {
     $db = getDbConnection();
     if (!$db) return [];
     
@@ -152,8 +182,8 @@ function getFeaturedJukeboxes($limit = 3) {
         $stmt->execute();
         $featured = $stmt->fetchAll();
         
-        // Falls nicht genug, mit nicht-featured auffüllen
-        if (count($featured) < $limit) {
+        // Falls nicht genug, mit nicht-featured auffüllen (nur wenn gewünscht)
+        if ($fillUp && count($featured) < $limit) {
             $existingIds = array_column($featured, 'id');
             $placeholders = !empty($existingIds) ? implode(',', array_fill(0, count($existingIds), '?')) : '';
             
@@ -174,6 +204,7 @@ function getFeaturedJukeboxes($limit = 3) {
         // Gallery-Images decodieren
         foreach ($featured as &$jukebox) {
             $jukebox['gallery_images'] = json_decode($jukebox['gallery_images'] ?? '[]', true) ?: [];
+            $jukebox['tags'] = json_decode($jukebox['tags'] ?? '[]', true) ?: [];
             $jukebox['featured'] = (bool)$jukebox['featured'];
             $jukebox['price_day'] = (float)$jukebox['price_day'];
         }
@@ -223,6 +254,11 @@ function saveJukebox($data, $id = null) {
         ':size' => sanitizeInput($data['size'] ?? ''),
         ':color' => sanitizeInput($data['color'] ?? ''),
         ':new_arrival' => !empty($data['new_arrival']) ? 1 : 0,
+        ':equipment' => sanitizeInput($data['equipment'] ?? ''),
+        ':equipment_en' => sanitizeInput($data['equipment_en'] ?? ''),
+        ':weight' => validateWeight($data['weight'] ?? null),
+        ':warehouse_address' => !empty(sanitizeInput($data['warehouse_address'] ?? '')) ? sanitizeInput($data['warehouse_address'] ?? '') : WAREHOUSE_ADDRESS_DEFAULT,
+        ':tags' => json_encode(sanitizeJukeboxTags($data['tags'] ?? [])),
         ':main_image' => sanitizeImageFilename($data['main_image'] ?? ''),
         ':gallery_images' => json_encode(sanitizeGalleryImages($data['gallery_images'] ?? [])),
         ':updated_at' => date('Y-m-d H:i:s')
@@ -261,6 +297,11 @@ function saveJukebox($data, $id = null) {
                     size = :size,
                     color = :color,
                     new_arrival = :new_arrival,
+                    equipment = :equipment,
+                    equipment_en = :equipment_en,
+                    weight = :weight,
+                    warehouse_address = :warehouse_address,
+                    tags = :tags,
                     main_image = :main_image,
                     gallery_images = :gallery_images,
                     updated_at = :updated_at
@@ -275,13 +316,15 @@ function saveJukebox($data, $id = null) {
                     short_description, short_description_en, description, description_en,
                     music_format, music_format_en, condition, condition_en, function_status,
                     power_connection, power_connection_en, dimensions, dimensions_en,
-                    price_day, featured, `order`, category_id, size, color, new_arrival, main_image, gallery_images, created_at, updated_at
+                    price_day, featured, `order`, category_id, size, color, new_arrival,
+                    equipment, equipment_en, weight, warehouse_address, tags, main_image, gallery_images, created_at, updated_at
                 ) VALUES (
                     :id, :name, :name_en, :manufacturer, :model, :year,
                     :short_description, :short_description_en, :description, :description_en,
                     :music_format, :music_format_en, :condition, :condition_en, :function_status,
                     :power_connection, :power_connection_en, :dimensions, :dimensions_en,
-                    :price_day, :featured, :order, :category_id, :size, :color, :new_arrival, :main_image, :gallery_images, :created_at, :updated_at
+                    :price_day, :featured, :order, :category_id, :size, :color, :new_arrival,
+                    :equipment, :equipment_en, :weight, :warehouse_address, :tags, :main_image, :gallery_images, :created_at, :updated_at
                 )
             ');
         }
@@ -367,6 +410,17 @@ function validatePrice($price) {
 }
 
 /**
+ * Gewicht validieren
+ */
+function validateWeight($weight) {
+    if (empty($weight) && $weight !== '0' && $weight !== 0) return null;
+    $weight = (float)str_replace(',', '.', (string)$weight);
+    if ($weight < 0) return 0;
+    if ($weight > 999999) return 999999;
+    return $weight;
+}
+
+/**
  * Funktionsstatus validieren
  */
 function sanitizeFunctionStatus($status) {
@@ -397,6 +451,47 @@ function sanitizeGalleryImages($images) {
         }
     }
     return array_values(array_unique($clean));
+}
+
+/**
+ * Jukebox-Tags bereinigen
+ */
+function sanitizeJukeboxTags($tags) {
+    if (!is_array($tags)) return [];
+    $clean = [];
+    foreach ($tags as $tag) {
+        $tag = sanitizeInput($tag);
+        if ($tag && array_key_exists($tag, JUKEBOX_TAGS)) {
+            $clean[] = $tag;
+        }
+    }
+    return array_values(array_unique($clean));
+}
+
+/**
+ * Label eines Tags in der aktuellen Sprache abrufen
+ */
+function getJukeboxTagLabel($tag, $lang = null) {
+    return __('jukebox_tag_' . $tag, [], $lang);
+}
+
+/**
+ * CSS-Farbklasse für ein Tag abrufen
+ */
+function getJukeboxTagColorClass($tag) {
+    $color = JUKEBOX_TAGS[$tag]['color'] ?? 'gray';
+    return 'jukebox-tag-' . $color;
+}
+
+/**
+ * HTML für ein einzelnes Tag-Render
+ */
+function renderJukeboxTag($tag) {
+    if (!array_key_exists($tag, JUKEBOX_TAGS)) return '';
+    $label = getJukeboxTagLabel($tag);
+    $class = getJukeboxTagColorClass($tag);
+    $icon = JUKEBOX_TAGS[$tag]['icon'] ?? '';
+    return '<span class="jukebox-tag ' . e($class) . '">' . $icon . '<span>' . e($label) . '</span></span>';
 }
 
 /**

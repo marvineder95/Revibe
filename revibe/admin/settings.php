@@ -17,11 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateCsrfToken($_POST['csrf_token'] ?? '')) {
         $error = 'Sicherheitsfehler. Bitte laden Sie die Seite neu.';
     } else {
-        if (isset($_POST['action']) && $_POST['action'] === 'update_api_key') {
-            setSetting('google_maps_api_key', trim($_POST['google_maps_api_key'] ?? ''));
-            unset($_SESSION['transport_cache']);
-            $success = 'API-Key wurde aktualisiert.';
-        } elseif (isset($_POST['action']) && $_POST['action'] === 'change_password') {
+        if (isset($_POST['action']) && $_POST['action'] === 'change_password') {
             $currentPassword = $_POST['current_password'] ?? '';
             $newPassword = $_POST['new_password'] ?? '';
             $confirmPassword = $_POST['confirm_password'] ?? '';
@@ -57,7 +53,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'transport_worker_hourly_rate',
                 'transport_worker_count',
                 'transport_setup_fee',
-                'warehouse_address',
                 'contract_fee_enabled',
                 'contract_fee_percent'
             ];
@@ -76,11 +71,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $settings = getAllSettings();
 $lang = getCurrentLanguage();
+$effectiveApiKey = getGoogleMapsApiKey($settings);
+$apiKeyFromEnv = !empty(getenv('GOOGLE_MAPS_API_KEY'));
+$apiKeyFromFile = defined('DATA_PATH') && file_exists(DATA_PATH . 'google-maps-api-key.php');
 
 // Google Maps API-Verbindung testen, wenn ein Key hinterlegt ist
 $apiTest = null;
-if (!empty($settings['google_maps_api_key'])) {
-    $apiTest = testGoogleMapsApiConnection($settings['google_maps_api_key'], $settings['warehouse_address']);
+if (!empty($effectiveApiKey)) {
+    $apiTest = testGoogleMapsApiConnection($effectiveApiKey, WAREHOUSE_ADDRESS_DEFAULT);
 }
 
 $lang = getCurrentLanguage();
@@ -88,13 +86,6 @@ $pageTitle = $lang === 'de' ? 'Einstellungen' : 'Settings';
 
 include PARTIALS_PATH . 'admin-header.php';
 ?>
-
-                <div class="admin-page-header">
-                    <div>
-                        <h1 class="admin-page-title"><?php echo $lang === 'de' ? 'Einstellungen' : 'Settings'; ?></h1>
-                        <p class="admin-page-subtitle"><?php echo $lang === 'de' ? 'Globale Konfiguration, Steuer, Transport und Sicherheit' : 'Global configuration, tax, transport and security'; ?></p>
-                    </div>
-                </div>
 
                 <div class="admin-card">
                     <div class="admin-card-header">
@@ -170,23 +161,15 @@ include PARTIALS_PATH . 'admin-header.php';
                             
                             <div>
                                 <h3 style="margin-bottom: var(--space-4); color: var(--color-primary);">Google Maps API</h3>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label class="form-label">API-Key</label>
-                                        <div style="display: flex; gap: var(--space-3); align-items: stretch;">
-                                            <input type="text" class="form-input" value="<?php echo !empty($settings['google_maps_api_key']) ? '••••••••••••' : ''; ?>" placeholder="Kein API-Key hinterlegt" readonly style="flex: 1; background: var(--color-cream);">
-                                            <button type="button" class="btn btn-primary" onclick="openApiKeyModal()">Aktualisieren</button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label class="form-label">Lager-Adresse (Startpunkt)</label>
-                                        <input type="text" name="warehouse_address" class="form-input" value="<?php echo e($settings['warehouse_address']); ?>">
-                                    </div>
-                                </div>
                                 <p style="font-size: var(--text-sm); color: var(--color-gray-500);">
-                                    Hinweis: Ohne gültigen API-Key werden Transportkosten als „individuell berechnet“ angezeigt.
+                                    Der API-Key wird über die Umgebungsvariable <code>GOOGLE_MAPS_API_KEY</code> in der <code>.htaccess</code> oder über die geschützte Datei <code>data/google-maps-api-key.php</code> geladen.
+                                    <?php if ($apiKeyFromEnv): ?>
+                                    <br><span style="color: #22c55e;">✓ Key ist aus der Umgebungsvariable aktiv.</span>
+                                    <?php elseif ($apiKeyFromFile): ?>
+                                    <br><span style="color: #22c55e;">✓ Key ist aus der geschützten Datei aktiv.</span>
+                                    <?php else: ?>
+                                    <br><span style="color: #ef4444;">✗ Keine Umgebungsvariable gefunden.</span>
+                                    <?php endif; ?>
                                 </p>
                                 <?php if ($apiTest !== null): ?>
                                 <p style="font-size: var(--text-sm); margin-top: var(--space-2); margin-bottom: 0;">
@@ -270,39 +253,6 @@ include PARTIALS_PATH . 'admin-header.php';
                 </div>
             </div>
 
-    <!-- API-Key Modal -->
-    <div id="apiKeyModal" class="admin-modal">
-        <div class="admin-modal-overlay" onclick="closeApiKeyModal()"></div>
-        <div class="admin-modal-content">
-            <div class="admin-modal-header">
-                <h3>Google Maps API-Key aktualisieren</h3>
-                <button type="button" class="admin-modal-close" onclick="closeApiKeyModal()">&times;</button>
-            </div>
-            <form method="POST" action="">
-                <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
-                <input type="hidden" name="action" value="update_api_key">
-                <div class="admin-modal-body">
-                    <div class="form-group">
-                        <label class="form-label">Neuer API-Key</label>
-                        <input type="text" name="google_maps_api_key" class="form-input" placeholder="Neuen API-Key eingeben" required>
-                    </div>
-                </div>
-                <div class="admin-modal-footer">
-                    <button type="button" class="btn btn-secondary" onclick="closeApiKeyModal()">Abbrechen</button>
-                    <button type="submit" class="btn btn-primary">Speichern</button>
-                </div>
-            </form>
-        </div>
-    </div>
     </main>
-
-    <script>
-        function openApiKeyModal() {
-            document.getElementById('apiKeyModal').classList.add('active');
-        }
-        function closeApiKeyModal() {
-            document.getElementById('apiKeyModal').classList.remove('active');
-        }
-    </script>
 
 <?php include PARTIALS_PATH . 'admin-footer.php'; ?>

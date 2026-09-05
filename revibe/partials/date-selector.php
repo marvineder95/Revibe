@@ -6,8 +6,10 @@
  *
  * Parameter:
  *   $dsShowModal (bool) - true auf Katalogseite, false auf Detailseite
+ *   $dsCompact (bool)  - true = nur Trigger-Button ohne Header/Status (z. B. in Filter-Bar)
  */
 $dsShowModal = !empty($dsShowModal);
+$dsCompact = !empty($dsCompact);
 $dsLang = getCurrentLanguage();
 $dsCart = getCart();
 $dsHasDates = !empty($dsCart['date_start']) && !empty($dsCart['date_end']);
@@ -17,10 +19,10 @@ if ($dsHasDates) {
     $startFormatted = date('d.m.Y', strtotime($dsCart['date_start']));
     $endFormatted = date('d.m.Y', strtotime($dsCart['date_end']));
     if ($dsCart['date_end'] !== $dsCart['date_start']) {
-        $dsDefaultDates = $dsCart['date_start'] . ' - ' . $dsCart['date_end'];
+        $dsDefaultDates = $startFormatted . ' - ' . $endFormatted;
         $dsFormattedPeriod = $startFormatted . ' - ' . $endFormatted;
     } else {
-        $dsDefaultDates = $dsCart['date_start'];
+        $dsDefaultDates = $startFormatted;
         $dsFormattedPeriod = $startFormatted;
     }
 }
@@ -64,7 +66,8 @@ if ($dsHasDates) {
 <?php endif; ?>
 
 <!-- Inline Date Selector -->
-<div class="date-selector" data-has-dates="<?php echo $dsHasDates ? '1' : '0'; ?>">
+<div class="date-selector<?php echo $dsCompact ? ' date-selector-compact' : ''; ?>" data-has-dates="<?php echo $dsHasDates ? '1' : '0'; ?>">
+    <?php if (!$dsCompact): ?>
     <div class="date-selector-header">
         <div class="date-selector-title-row">
             <label class="form-label"><?php echo __('catalog_select_dates'); ?></label>
@@ -89,16 +92,27 @@ if ($dsHasDates) {
         </div>
         <?php endif; ?>
     </div>
+    <?php endif; ?>
 
     <div class="date-selector-body">
+        <?php if ($dsShowModal): ?>
+        <button type="button" class="date-selector-trigger" id="date-selector-trigger">
+            <span class="date-selector-trigger-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span>
+            <span class="date-selector-trigger-dates" id="date-selector-trigger-dates"><?php echo $dsHasDates ? e($dsFormattedPeriod) : e(__('catalog_select_dates')); ?></span>
+            <span class="date-selector-trigger-action" id="date-selector-trigger-action"><?php echo $dsHasDates ? e(__('catalog_date_change')) : e(__('catalog_select_dates')); ?></span>
+        </button>
+        <?php else: ?>
         <div class="date-selector-input-wrap">
-            <input type="text" class="date-selector-input form-input" value="<?php echo e($dsDefaultDates); ?>" placeholder="TT.MM.JJJJ - TT.MM.JJJJ">
-            <input type="hidden" class="date-selector-start" value="<?php echo e($dsCart['date_start']); ?>">
-            <input type="hidden" class="date-selector-end" value="<?php echo e($dsCart['date_end']); ?>">
+            <input type="text" class="date-selector-input form-input" value="<?php echo e($dsDefaultDates); ?>" placeholder="TT.MM.JJJJ - TT.MM.JJJJ" readonly>
         </div>
-        <div class="date-selector-status">
+        <?php endif; ?>
+        <input type="hidden" class="date-selector-start" value="<?php echo e($dsCart['date_start']); ?>">
+        <input type="hidden" class="date-selector-end" value="<?php echo e($dsCart['date_end']); ?>">
+        <?php if (!$dsCompact): ?>
+        <div class="date-selector-status" id="date-selector-status">
             <?php echo $dsHasDates ? e($dsFormattedPeriod) : __('catalog_date_selector_hint'); ?>
         </div>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -107,6 +121,7 @@ window.catalogDateSavingText = <?php echo json_encode(__('catalog_date_saving'))
 window.catalogDateSavedText = <?php echo json_encode(__('catalog_date_saved')); ?>;
 window.catalogNotAvailableText = <?php echo json_encode(__('catalog_not_available')); ?>;
 window.catalogSelectDatesText = <?php echo json_encode(__('catalog_select_dates_first')); ?>;
+window.catalogSelectDatesTitleText = <?php echo json_encode(__('catalog_select_dates')); ?>;
 window.catalogDateSelectorHint = <?php echo json_encode(__('catalog_date_selector_hint')); ?>;
 window.catalogDateSelectedPeriod = <?php echo json_encode(__('catalog_date_selected_period')); ?>;
 window.catalogDateChange = <?php echo json_encode(__('catalog_date_change')); ?>;

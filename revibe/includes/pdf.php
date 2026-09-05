@@ -56,7 +56,7 @@ class RevibePdf extends TCPDF {
 
         // Logo einfügen (links)
         if (file_exists($this->logoPath)) {
-            $this->Image($this->logoPath, 15, 9, 70, 28, '', 'L', 'T', 0, false);
+            $this->Image($this->logoPath, 15, 14, 35, 14, '', 'L', 'T', 0, false);
         }
 
         // Dokumententyp rechts in Brand-Blau
@@ -200,8 +200,9 @@ class RevibePdf extends TCPDF {
         $this->SetFont('dejavusans', '', 9);
         $this->SetTextColor(REVIBE_DARK[0], REVIBE_DARK[1], REVIBE_DARK[2]);
 
+        $itemsSubtotal = ($pricing['rental_subtotal'] ?? 0) + ($pricing['transport_net'] ?? 0) + ($pricing['custom_net'] ?? 0);
         $this->Cell(135, 7, 'Zwischensumme', 0, 0, 'R');
-        $this->Cell(35, 7, formatMoneyPdf($pricing['rental_subtotal']), 0, 1, 'R');
+        $this->Cell(35, 7, formatMoneyPdf($itemsSubtotal), 0, 1, 'R');
 
         if (!empty($pricing['duration_discount_amount']) && $pricing['duration_discount_amount'] > 0) {
             $this->SetTextColor(REVIBE_RED[0], REVIBE_RED[1], REVIBE_RED[2]);
@@ -308,6 +309,40 @@ class RevibePdf extends TCPDF {
         $this->Cell(0, 6, '14 Tage nach Rechnungsdatum', 0, 1, 'L');
         $this->SetTextColor(REVIBE_DARK[0], REVIBE_DARK[1], REVIBE_DARK[2]);
     }
+
+    /**
+     * Kundenunterschrift in die Rechnung einfügen
+     */
+    public function addSignature($signatureData, $signerName = '') {
+        if (empty($signatureData)) return;
+
+        // Base64-Präfix entfernen
+        if (strpos($signatureData, 'data:image') === 0) {
+            $signatureData = substr($signatureData, strpos($signatureData, ',') + 1);
+        }
+
+        $imageBlob = base64_decode($signatureData, true);
+        if ($imageBlob === false || empty($imageBlob)) return;
+
+        $this->Ln(8);
+        $this->SetFont('dejavusans', 'B', 10);
+        $this->SetTextColor(REVIBE_BLUE[0], REVIBE_BLUE[1], REVIBE_BLUE[2]);
+        $this->Cell(0, 6, 'Unterschrift', 0, 1, 'L');
+
+        if (!empty($signerName)) {
+            $this->SetFont('dejavusans', '', 9);
+            $this->SetTextColor(REVIBE_DARK[0], REVIBE_DARK[1], REVIBE_DARK[2]);
+            $this->Cell(0, 6, $signerName, 0, 1, 'L');
+        }
+
+        $this->Ln(2);
+        $this->Image('@' . $imageBlob, $this->GetX(), $this->GetY(), 60, 0, 'PNG', '', 'T', false, 300, '', false, false, 0, false, false, false);
+        $this->Ln(22);
+
+        $this->SetFont('dejavusans', '', 8);
+        $this->SetTextColor(REVIBE_GRAY[0], REVIBE_GRAY[1], REVIBE_GRAY[2]);
+        $this->Cell(0, 5, 'Mit Ihrer Unterschrift akzeptieren Sie die angebotenen Leistungen und Geschäftsbedingungen.', 0, 1, 'L');
+    }
 }
 
 /**
@@ -325,7 +360,7 @@ function generateOfferPdf($inquiry, $offerNumber, $validUntil) {
         'Angebotsnummer' => $offerNumber,
         'Datum' => date('d.m.Y', strtotime($inquiry['created_at'])),
         'Gültig bis' => date('d.m.Y', strtotime($validUntil)),
-        'Mietdauer' => ($inquiry['duration_days'] ?? 1) . ' Tage'
+        'Mietdauer' => date('d.m.Y', strtotime($inquiry['date_start'])) . ' - ' . date('d.m.Y', strtotime($inquiry['date_end']))
     ]);
 
     $name = trim(($inquiry['firstname'] ?? '') . ' ' . ($inquiry['lastname'] ?? ''));
@@ -345,13 +380,28 @@ function generateOfferPdf($inquiry, $offerNumber, $validUntil) {
         }
     }
 
+    $transportItem = buildPdfTransportItem($inquiry, $pricing);
+    if ($transportItem) {
+        $items[] = $transportItem;
+    }
+
+    foreach (buildPdfCustomItems($pricing) as $customItem) {
+        $items[] = $customItem;
+    }
+
     $pdf->addPositionsTable($items, $pricing);
 
-    $pdf->addNotes([
+    $notes = [
         'Dieses Angebot ist unverbindlich und gilt bis zum ' . date('d.m.Y', strtotime($validUntil)) . '.',
-        'Transportkosten: Die angegebenen Transportkosten verstehen sich als Richtwert. Bei individuellen Anforderkeiten kann der Endpreis davon abweichen.',
-        'Bei Annahme des Angebots erhalten Sie umgehend eine verbindliche Rechnung.'
-    ]);
+        'Bei Annahme des Angebots erhalten Sie umgehend eine verbindliche Rechnung.',
+        'Die genaue Anlieferungsuhrzeit wird gerne mit Ihnen individuell abgestimmt – die Box steht Ihnen ab diesem Zeitpunkt 24 Stunden lang zur Verfügung!'
+    ];
+
+    if (!empty($inquiry['transport_error'])) {
+        $notes[] = 'Transportkosten: Die automatische Berechnung der Transportkosten war nicht möglich. Die Transportkosten sind daher nicht in diesem Angebot enthalten und werden Ihnen nachträglich in einem separaten Angebot mitgeteilt.';
+    }
+
+    $pdf->addNotes($notes);
 
     $filename = sanitizeFileName('Angebot_' . $offerNumber . '.pdf');
     $path = PDF_UPLOAD_PATH . 'offers/' . $filename;
@@ -365,9 +415,132 @@ function generateOfferPdf($inquiry, $offerNumber, $validUntil) {
 }
 
 /**
- * Rechnungs-PDF erzeugen
+ * Angebot für eine Anfrage erstellen, PDF generieren und per E-Mail an den Kunden senden.
+ * Wird von contact.php (automatisch) und admin/offers.php (manuell) verwendet.
+ *
+ * @param string $inquiryId ID der Anfrage
+ * @param int $validDays Gültigkeit des Angebots in Tagen
+ * @return array|false Erstelltes Angebot oder false bei Fehler
  */
-function generateInvoicePdf($inquiry, $invoiceNumber, $offerNumber = null) {
+function buildAndSendOffer($inquiryId, $validDays = 3) {
+    $inquiry = getInquiryById($inquiryId);
+    if (!$inquiry) {
+        error_log('buildAndSendOffer: Anfrage nicht gefunden: ' . $inquiryId);
+        return false;
+    }
+
+    $email = $inquiry['email'] ?? '';
+    if (empty($email)) {
+        error_log('buildAndSendOffer: Anfrage hat keine E-Mail: ' . $inquiryId);
+        return false;
+    }
+
+    // 1. Dummy-PDF mit Platzhalter-Nummer erstellen, um Dateipfad zu erhalten
+    $offerPdf = generateOfferPdf($inquiry, 'ANG-' . date('Y') . '-00000', '+' . $validDays . ' days');
+    if (!$offerPdf) {
+        error_log('buildAndSendOffer: Dummy-PDF konnte nicht erstellt werden für Anfrage: ' . $inquiryId);
+        return false;
+    }
+
+    $dummyOfferPdfPath = $offerPdf['path'];
+
+    // 2. Angebot in Datenbank speichern
+    $offer = createOffer($inquiryId, $offerPdf['path'], $validDays);
+
+    if (!$offer) {
+        if (!empty($dummyOfferPdfPath) && file_exists($dummyOfferPdfPath)) {
+            @unlink($dummyOfferPdfPath);
+        }
+        error_log('buildAndSendOffer: Angebot konnte nicht gespeichert werden für Anfrage: ' . $inquiryId);
+        return false;
+    }
+
+    // 3. Reservierungen mit Angebot verknüpfen
+    linkRentalsToOffer($inquiryId, $offer['id']);
+
+    // 4. Korrekte Angebotsnummer verwenden und PDF neu generieren
+    $offerPdf = generateOfferPdf($inquiry, $offer['offer_number'], $offer['valid_until']);
+    if ($offerPdf) {
+        updateOfferPdfPath($offer['id'], $offerPdf['path']);
+        $offer['pdf_path'] = $offerPdf['path'];
+    }
+
+    // 5. Altes Dummy-PDF entfernen
+    if (!empty($dummyOfferPdfPath) && file_exists($dummyOfferPdfPath)) {
+        @unlink($dummyOfferPdfPath);
+    }
+
+    // 6. E-Mail an Kunden senden
+    $offerLink = rtrim(BASE_URL, '/') . '/offer.php?token=' . $offer['token'];
+    $name = trim(($inquiry['firstname'] ?? '') . ' ' . ($inquiry['lastname'] ?? ''));
+
+    $realOfferPdfPath = !empty($offer['pdf_path']) ? realpath($offer['pdf_path']) : false;
+    $realPdfBasePath = realpath(PDF_UPLOAD_PATH);
+
+    if ($realOfferPdfPath !== false && $realPdfBasePath !== false && strpos($realOfferPdfPath, $realPdfBasePath) === 0 && file_exists($realOfferPdfPath)) {
+        $custSubject = __('admin_offer_email_subject', ['company' => COMPANY_NAME]);
+        $offerHtmlBody = __('admin_offer_email_body', [
+            'name' => $name,
+            'offer_link' => $offerLink,
+            'valid_until' => date('d.m.Y', strtotime($offer['valid_until'])),
+            'company' => COMPANY_NAME
+        ]);
+        $offerPlainBody = "Hallo {$name},\n\nvielen Dank für Ihre Anfrage. Im Anhang finden Sie Ihr unverbindliches Angebot.\n\nSie können das Angebot online einsehen und annehmen oder ablehnen:\n{$offerLink}\n\nDas Angebot ist gültig bis " . date('d.m.Y', strtotime($offer['valid_until'])) . ".\n\nMit freundlichen Grüßen\n" . COMPANY_NAME . " Team";
+
+        $custHeaders = "From: " . MAIL_SENDER . "\r\n";
+        $custHeaders .= "Reply-To: " . MAIL_SENDER . "\r\n";
+        $custHeaders .= "X-Mailer: PHP/" . phpversion();
+
+        $pdfContent = file_get_contents($realOfferPdfPath);
+        $pdfEncoded = chunk_split(base64_encode($pdfContent));
+        $pdfFilename = basename($realOfferPdfPath);
+
+        $outerBoundary = bin2hex(random_bytes(16));
+        $innerBoundary = bin2hex(random_bytes(16));
+        $custHeaders .= "MIME-Version: 1.0\r\n";
+        $custHeaders .= "Content-Type: multipart/mixed; boundary=\"{$outerBoundary}\"\r\n";
+
+        $custBodyMime = "--{$outerBoundary}\r\n";
+        $custBodyMime .= "Content-Type: multipart/alternative; boundary=\"{$innerBoundary}\"\r\n\r\n";
+
+        $custBodyMime .= "--{$innerBoundary}\r\n";
+        $custBodyMime .= "Content-Type: text/plain; charset=UTF-8\r\n";
+        $custBodyMime .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
+        $custBodyMime .= $offerPlainBody . "\r\n\r\n";
+
+        $custBodyMime .= "--{$innerBoundary}\r\n";
+        $custBodyMime .= "Content-Type: text/html; charset=UTF-8\r\n";
+        $custBodyMime .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
+        $custBodyMime .= $offerHtmlBody . "\r\n\r\n";
+        $custBodyMime .= "--{$innerBoundary}--\r\n\r\n";
+
+        $custBodyMime .= "--{$outerBoundary}\r\n";
+        $custBodyMime .= "Content-Type: application/pdf; name=\"{$pdfFilename}\"\r\n";
+        $custBodyMime .= "Content-Transfer-Encoding: base64\r\n";
+        $custBodyMime .= "Content-Disposition: attachment; filename=\"{$pdfFilename}\"\r\n\r\n";
+        $custBodyMime .= $pdfEncoded . "\r\n";
+        $custBodyMime .= "--{$outerBoundary}--";
+
+        $offerMailSent = mail($email, $custSubject, $custBodyMime, $custHeaders);
+        if (!$offerMailSent) {
+            error_log('Angebots-E-Mail konnte nicht an ' . $email . ' gesendet werden.');
+        }
+    } else {
+        error_log('Angebots-PDF-Pfad ungültig oder nicht lesbar: ' . ($offer['pdf_path'] ?? 'n/a'));
+    }
+
+    return $offer;
+}
+
+/**
+ * Rechnungs-PDF erzeugen
+ *
+ * @param array $inquiry Anfragedaten
+ * @param string $invoiceNumber Rechnungsnummer
+ * @param string|null $offerNumber Angebotsnummer
+ * @param string|null $signatureData Base64-kodierte PNG-Unterschrift
+ */
+function generateInvoicePdf($inquiry, $invoiceNumber, $offerNumber = null, $signatureData = null) {
     ensurePdfDirectories();
 
     $pdf = new RevibePdf('Rechnung', $invoiceNumber);
@@ -378,7 +551,7 @@ function generateInvoicePdf($inquiry, $invoiceNumber, $offerNumber = null) {
     $details = [
         'Rechnungsnummer' => $invoiceNumber,
         'Rechnungsdatum' => date('d.m.Y'),
-        'Mietdauer' => ($inquiry['duration_days'] ?? 1) . ' Tage'
+        'Mietzeitraum' => date('d.m.Y', strtotime($inquiry['date_start'])) . ' - ' . date('d.m.Y', strtotime($inquiry['date_end']))
     ];
     if ($offerNumber) {
         $details['Angebotsnummer'] = $offerNumber;
@@ -401,6 +574,15 @@ function generateInvoicePdf($inquiry, $invoiceNumber, $offerNumber = null) {
         }
     }
 
+    $transportItem = buildPdfTransportItem($inquiry, $pricing);
+    if ($transportItem) {
+        $items[] = $transportItem;
+    }
+
+    foreach (buildPdfCustomItems($pricing) as $customItem) {
+        $items[] = $customItem;
+    }
+
     $pdf->addPositionsTable($items, $pricing);
 
     $pdf->addNotes([
@@ -410,6 +592,11 @@ function generateInvoicePdf($inquiry, $invoiceNumber, $offerNumber = null) {
     ]);
 
     $pdf->addBankDetails();
+
+    // Unterschrift des Kunden einfügen, sofern vorhanden
+    if (!empty($signatureData)) {
+        $pdf->addSignature($signatureData, $name);
+    }
 
     $filename = sanitizeFileName('Rechnung_' . $invoiceNumber . '.pdf');
     $path = PDF_UPLOAD_PATH . 'invoices/' . $filename;
@@ -430,6 +617,50 @@ function formatMoneyPdf($amount) {
 }
 
 /**
+ * Hilfsfunktion: Zusätzliche Positionen für die PDF-Positions-Tabelle erzeugen
+ */
+function buildPdfCustomItems($pricing) {
+    $items = [];
+    foreach ((array)($pricing['custom_items'] ?? []) as $ci) {
+        if (empty($ci['name']) || (float)$ci['total'] <= 0) {
+            continue;
+        }
+        $qty = (float)$ci['quantity'];
+        $qtyFormatted = ($qty == (int)$qty) ? (string)(int)$qty : number_format($qty, 2, ',', '.');
+        $items[] = [
+            'name' => $ci['name'],
+            'quantity' => $qtyFormatted,
+            'unit_price' => formatMoneyPdf($ci['unit_price']),
+            'total' => formatMoneyPdf($ci['total'])
+        ];
+    }
+    return $items;
+}
+
+/**
+ * Hilfsfunktion: Transport-Position für die PDF-Positions-Tabelle erzeugen
+ */
+function buildPdfTransportItem($inquiry, $pricing) {
+    $transportNet = (float)($pricing['transport_net'] ?? 0);
+    if ($transportNet <= 0) {
+        return null;
+    }
+
+    $name = 'Transport';
+    $distance = (float)($inquiry['transport_distance_km'] ?? 0);
+    if ($distance > 0) {
+        $name .= ' (ca. ' . number_format($distance, 0, ',', '.') . ' km)';
+    }
+
+    return [
+        'name' => $name,
+        'quantity' => '1',
+        'unit_price' => formatMoneyPdf($transportNet),
+        'total' => formatMoneyPdf($transportNet)
+    ];
+}
+
+/**
  * Hilfsfunktion: Dateiname sicher machen
  */
 function sanitizeFileName($filename) {
@@ -447,4 +678,135 @@ function ensurePdfDirectories() {
     if (!file_exists(PDF_UPLOAD_PATH . 'invoices')) {
         mkdir(PDF_UPLOAD_PATH . 'invoices', 0755, true);
     }
+}
+
+/**
+ * Rechnungs-PDF per E-Mail an den Kunden versenden
+ *
+ * @param array $invoice Rechnungsdatensatz
+ * @param array $inquiry Zugehörige Anfrage
+ * @return bool true bei Erfolg, false bei Fehler
+ */
+function sendInvoiceEmail($invoice, $inquiry) {
+    $name = trim(($inquiry['firstname'] ?? '') . ' ' . ($inquiry['lastname'] ?? ''));
+    $email = $inquiry['email'] ?? '';
+
+    if (empty($email) || empty($invoice['pdf_path'])) {
+        return false;
+    }
+
+    // Pfad validieren: muss innerhalb von PDF_UPLOAD_PATH liegen
+    $realPdfPath = realpath($invoice['pdf_path']);
+    $realBasePath = realpath(PDF_UPLOAD_PATH);
+    if ($realPdfPath === false || $realBasePath === false || strpos($realPdfPath, $realBasePath) !== 0 || !file_exists($realPdfPath)) {
+        error_log('Rechnungs-PDF nicht lesbar oder Pfad ungültig: ' . ($invoice['pdf_path'] ?? 'n/a'));
+        return false;
+    }
+
+    $pdfContent = file_get_contents($realPdfPath);
+    if ($pdfContent === false) {
+        error_log('Rechnungs-PDF konnte nicht gelesen werden: ' . $realPdfPath);
+        return false;
+    }
+
+    $subject = __('admin_invoice_email_subject', ['company' => COMPANY_NAME]);
+    $htmlBody = __('admin_invoice_email_body', [
+        'name' => $name,
+        'company' => COMPANY_NAME
+    ]);
+    $plainBody = "Hallo {$name},\n\nvielen Dank für die Annahme unseres Angebots. Im Anhang finden Sie Ihre Rechnung.\n\nBitte überweisen Sie den Betrag innerhalb von 14 Tagen auf das in der Rechnung angegebene Konto.\n\nMit freundlichen Grüßen\n" . COMPANY_NAME . " Team";
+
+    $headers = "From: " . MAIL_SENDER . "\r\n";
+    $headers .= "Reply-To: " . MAIL_SENDER . "\r\n";
+    $headers .= "X-Mailer: PHP/" . phpversion();
+
+    $pdfEncoded = chunk_split(base64_encode($pdfContent));
+    $pdfFilename = basename($realPdfPath);
+
+    $outerBoundary = bin2hex(random_bytes(16));
+    $innerBoundary = bin2hex(random_bytes(16));
+    $headers .= "MIME-Version: 1.0\r\n";
+    $headers .= "Content-Type: multipart/mixed; boundary=\"{$outerBoundary}\"\r\n";
+
+    $bodyMime = "--{$outerBoundary}\r\n";
+    $bodyMime .= "Content-Type: multipart/alternative; boundary=\"{$innerBoundary}\"\r\n\r\n";
+
+    $bodyMime .= "--{$innerBoundary}\r\n";
+    $bodyMime .= "Content-Type: text/plain; charset=UTF-8\r\n";
+    $bodyMime .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
+    $bodyMime .= $plainBody . "\r\n\r\n";
+
+    $bodyMime .= "--{$innerBoundary}\r\n";
+    $bodyMime .= "Content-Type: text/html; charset=UTF-8\r\n";
+    $bodyMime .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
+    $bodyMime .= $htmlBody . "\r\n\r\n";
+    $bodyMime .= "--{$innerBoundary}--\r\n\r\n";
+
+    $bodyMime .= "--{$outerBoundary}\r\n";
+    $bodyMime .= "Content-Type: application/pdf; name=\"{$pdfFilename}\"\r\n";
+    $bodyMime .= "Content-Transfer-Encoding: base64\r\n";
+    $bodyMime .= "Content-Disposition: attachment; filename=\"{$pdfFilename}\"\r\n\r\n";
+    $bodyMime .= $pdfEncoded . "\r\n";
+    $bodyMime .= "--{$outerBoundary}--";
+
+    return mail($email, $subject, $bodyMime, $headers);
+}
+
+/**
+ * Admin-Benachrichtigung versenden, wenn ein Angebot angenommen und eine Rechnung erstellt wurde.
+ *
+ * @param array $offer Angenommenes Angebot
+ * @param array $invoice Erstellte Rechnung
+ * @param array $inquiry Zugehörige Anfrage
+ * @return bool true bei Erfolg, false bei Fehler
+ */
+function sendAdminInvoiceNotification($offer, $invoice, $inquiry) {
+    $customerName = trim(($inquiry['firstname'] ?? '') . ' ' . ($inquiry['lastname'] ?? ''));
+    $customerEmail = $inquiry['email'] ?? '-';
+    $offerNumber = $offer['offer_number'] ?? '-';
+    $invoiceNumber = $invoice['invoice_number'] ?? '-';
+    $amount = formatMoneyPdf($invoice['amount_gross'] ?? 0);
+
+    $subject = '[Revibe] Angebot angenommen – Rechnung erstellt: ' . $offerNumber;
+    $plainBody = "Hallo Team,\n\n";
+    $plainBody .= "ein Kunde hat soeben ein Angebot angenommen. Die Rechnung wurde automatisch erstellt.\n\n";
+    $plainBody .= "Kunde: {$customerName}\n";
+    $plainBody .= "E-Mail: {$customerEmail}\n";
+    $plainBody .= "Angebot: {$offerNumber}\n";
+    $plainBody .= "Rechnung: {$invoiceNumber}\n";
+    $plainBody .= "Betrag: {$amount}\n\n";
+    $plainBody .= "Bitte im Admin-Bereich prüfen und die Rechnung an den Kunden versenden.\n\n";
+    $plainBody .= "Mit freundlichen Grüßen\nRevibe System";
+
+    $htmlBody = "<p>Hallo Team,</p>";
+    $htmlBody .= "<p>ein Kunde hat soeben ein Angebot angenommen. Die Rechnung wurde automatisch erstellt.</p>";
+    $htmlBody .= "<ul>";
+    $htmlBody .= "<li><strong>Kunde:</strong> " . e($customerName) . "</li>";
+    $htmlBody .= "<li><strong>E-Mail:</strong> " . e($customerEmail) . "</li>";
+    $htmlBody .= "<li><strong>Angebot:</strong> " . e($offerNumber) . "</li>";
+    $htmlBody .= "<li><strong>Rechnung:</strong> " . e($invoiceNumber) . "</li>";
+    $htmlBody .= "<li><strong>Betrag:</strong> " . e($amount) . "</li>";
+    $htmlBody .= "</ul>";
+    $htmlBody .= "<p>Bitte im <a href=\"" . rtrim(BASE_URL, '/') . "/admin/invoices.php\">Admin-Bereich</a> prüfen und die Rechnung an den Kunden versenden.</p>";
+    $htmlBody .= "<p>Mit freundlichen Grüßen<br>Revibe System</p>";
+
+    $headers = "From: " . MAIL_SENDER . "\r\n";
+    $headers .= "Reply-To: " . MAIL_SENDER . "\r\n";
+    $headers .= "X-Mailer: PHP/" . phpversion();
+
+    $boundary = bin2hex(random_bytes(16));
+    $headers .= "MIME-Version: 1.0\r\n";
+    $headers .= "Content-Type: multipart/alternative; boundary=\"{$boundary}\"\r\n";
+
+    $bodyMime = "--{$boundary}\r\n";
+    $bodyMime .= "Content-Type: text/plain; charset=UTF-8\r\n";
+    $bodyMime .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
+    $bodyMime .= $plainBody . "\r\n\r\n";
+    $bodyMime .= "--{$boundary}\r\n";
+    $bodyMime .= "Content-Type: text/html; charset=UTF-8\r\n";
+    $bodyMime .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
+    $bodyMime .= $htmlBody . "\r\n\r\n";
+    $bodyMime .= "--{$boundary}--";
+
+    return mail(MAIL_RECIPIENT, $subject, $bodyMime, $headers);
 }

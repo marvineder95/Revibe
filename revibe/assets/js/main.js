@@ -7,12 +7,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialisierung
     initHeader();
     initMobileMenu();
+    initCarousel();
     initInquiryList();
     initFAQ();
     initScrollAnimations();
     initCookieNotice();
     initSmoothScroll();
-    initGallery();
+    // initGallery() wird inline auf jukebox.php initialisiert
     initCatalogFilters();
     initDateSelector();
 });
@@ -189,11 +190,14 @@ function initDateSelector() {
     const modalViewBtn = modalOverlay ? modalOverlay.querySelector('#date-modal-view') : null;
 
     const inlineInput = inlineWrapper.querySelector('.date-selector-input');
+    const inlineTrigger = inlineWrapper.querySelector('.date-selector-trigger');
+    const inlineTriggerDates = inlineWrapper.querySelector('#date-selector-trigger-dates');
+    const inlineTriggerAction = inlineWrapper.querySelector('#date-selector-trigger-action');
     const inlineStart = inlineWrapper.querySelector('.date-selector-start');
     const inlineEnd = inlineWrapper.querySelector('.date-selector-end');
-    const inlineStatus = inlineWrapper.querySelector('.date-selector-status');
+    const inlineStatus = inlineWrapper.querySelector('#date-selector-status');
 
-    if (!inlineInput || !inlineStart || !inlineEnd) return;
+    if ((!inlineInput && !inlineTrigger) || !inlineStart || !inlineEnd) return;
 
     const lang = document.documentElement.lang || 'de';
     const flatpickrLocale = lang === 'de' ? 'de' : 'en';
@@ -238,12 +242,19 @@ function initDateSelector() {
     }
 
     function updateDateDisplay(start, end) {
-        const displayPeriod = start && end ? (start === end ? isoToDisplay(start) : isoToDisplay(start) + ' - ' + isoToDisplay(end)) : '';
+        const finalEnd = end || start;
+        const displayPeriod = start && finalEnd ? (start === finalEnd ? isoToDisplay(start) : isoToDisplay(start) + ' - ' + isoToDisplay(finalEnd)) : '';
         if (inlineStatus) {
             inlineStatus.textContent = displayPeriod || (window.catalogDateSelectorHint || 'Datumsauswahl wird für alle ausgewählten Jukeboxen verwendet.');
         }
-        inlineWrapper.setAttribute('data-has-dates', start && end ? '1' : '0');
+        inlineWrapper.setAttribute('data-has-dates', start && finalEnd ? '1' : '0');
         updateSelectedPeriod(displayPeriod);
+        if (inlineTriggerDates) {
+            inlineTriggerDates.textContent = displayPeriod || (window.catalogSelectDatesTitleText || 'Mietzeitraum wählen');
+        }
+        if (inlineTriggerAction) {
+            inlineTriggerAction.textContent = displayPeriod ? (window.catalogDateChange || 'Ändern') : (window.catalogSelectDatesTitleText || 'Wählen');
+        }
     }
 
     function updateSelectedPeriod(displayPeriod) {
@@ -261,22 +272,26 @@ function initDateSelector() {
         if (!modalStart || !modalEnd || !modalCalendarInstance) return;
         modalStart.value = start;
         modalEnd.value = end || start;
-        modalCalendarInstance.setDate(start && end ? [start, end] : (start || []), true);
+        // false = onChange-Event nicht auslösen, verhindert Endlos-Schleife mit syncToInline
+        modalCalendarInstance.setDate(start && end ? [start, end] : (start || []), false);
     }
 
     function syncToInline(start, end) {
-        if (!inlineInput || !inlineStart || !inlineEnd) return;
+        if (!inlineStart || !inlineEnd) return;
         inlineStart.value = start;
         inlineEnd.value = end || start;
         if (inlineCalendarInstance) {
-            inlineCalendarInstance.setDate(start && end ? [start, end] : (start || []), true);
-        } else {
+            // false = onChange-Event nicht auslösen, verhindert Endlos-Schleife mit syncToModal
+            inlineCalendarInstance.setDate(start && end ? [start, end] : (start || []), false);
+        } else if (inlineInput) {
             inlineInput.value = start && end ? (start === end ? isoToDisplay(start) : isoToDisplay(start) + ' - ' + isoToDisplay(end)) : '';
         }
-    }
-
-    function closeModal() {
-        if (modalOverlay) modalOverlay.classList.add('is-hidden');
+        if (inlineTriggerDates) {
+            inlineTriggerDates.textContent = start && end ? (start === end ? isoToDisplay(start) : isoToDisplay(start) + ' - ' + isoToDisplay(end)) : (window.catalogSelectDatesTitleText || 'Mietzeitraum wählen');
+        }
+        if (inlineTriggerAction) {
+            inlineTriggerAction.textContent = start && end ? (window.catalogDateChange || 'Ändern') : (window.catalogSelectDatesTitleText || 'Wählen');
+        }
     }
 
     function onFlatpickrChange(selectedDates, dateStr, instance) {
@@ -285,9 +300,15 @@ function initDateSelector() {
         const startIso = start ? displayToIso(start) : '';
         const endIso = end ? displayToIso(end) : '';
 
+        // Quell-Inputs direkt setzen, Gegenstück synchronisieren, aber nicht denselben Kalender
+        // nochmal setDate aufrufen, damit Range-Auswahl nicht zurückgesetzt wird
         if (instance === modalCalendarInstance) {
+            if (modalStart) modalStart.value = startIso;
+            if (modalEnd) modalEnd.value = endIso || startIso;
             syncToInline(startIso, endIso);
         } else if (instance === inlineCalendarInstance) {
+            if (inlineStart) inlineStart.value = startIso;
+            if (inlineEnd) inlineEnd.value = endIso || startIso;
             syncToModal(startIso, endIso);
         }
 
@@ -297,6 +318,11 @@ function initDateSelector() {
             saveDates(startIso, endIso).then(data => {
                 if (data.success) {
                     if (status) status.textContent = window.catalogDateSavedText || 'Mietzeitraum gespeichert.';
+                    // Auf der Detailseite (inline-Kalender) Seite neu laden,
+                    // damit Verfügbarkeitshinweis/Button-Status aktualisiert werden.
+                    if (instance === inlineCalendarInstance) {
+                        window.location.reload();
+                    }
                 } else if (status) {
                     status.textContent = 'Fehler beim Speichern.';
                 }
@@ -308,32 +334,91 @@ function initDateSelector() {
 
     let inlineCalendarInstance = null;
     let modalCalendarInstance = null;
+    let modalCalendarInitialized = false;
 
-    if (typeof flatpickr !== 'undefined') {
+    function initModalCalendar() {
+        if (!modalCalendarEl || modalCalendarInitialized) return;
+        if (typeof flatpickr === 'undefined') return;
+
+        // Sicherstellen, dass keine verwaiste Instanz mit defektem Zustand zurückbleibt
+        if (modalCalendarEl._flatpickr) {
+            modalCalendarEl._flatpickr.destroy();
+        }
+
         const defaultStart = inlineStart.value ? isoToDisplay(inlineStart.value) : '';
         const defaultEnd = inlineEnd.value ? isoToDisplay(inlineEnd.value) : '';
         const defaultDates = defaultStart && defaultEnd ? (defaultStart === defaultEnd ? defaultStart : [defaultStart, defaultEnd]) : null;
 
-        inlineCalendarInstance = flatpickr(inlineInput, {
+        modalCalendarInstance = flatpickr(modalCalendarEl, {
             mode: 'range',
             minDate: 'today',
             dateFormat: 'd.m.Y',
             locale: flatpickrLocale,
-            allowInput: true,
+            inline: true,
             defaultDate: defaultDates,
             onChange: onFlatpickrChange
         });
+        modalCalendarInitialized = true;
+    }
 
+    function openModal() {
+        if (modalOverlay) {
+            modalOverlay.classList.remove('is-hidden');
+            initModalCalendar();
+        }
+    }
+
+    function closeModal() {
+        if (modalOverlay) modalOverlay.classList.add('is-hidden');
+    }
+
+    if (typeof flatpickr !== 'undefined') {
         if (modalCalendarEl) {
-            modalCalendarInstance = flatpickr(modalCalendarEl, {
+            // Auf Katalogseite: Inline-Selektor ist nur Trigger fürs Modal
+            if (inlineTrigger) {
+                inlineTrigger.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    openModal();
+                });
+            } else if (inlineInput) {
+                inlineInput.setAttribute('readonly', 'readonly');
+                inlineInput.style.cursor = 'pointer';
+                inlineInput.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    openModal();
+                });
+            }
+
+            // Modal-Kalender erst bei Bedarf initialisieren (vermeidet defekte
+            // Initialisierung in unsichtbarem Container und garantiert onChange).
+            if (modalOverlay && !modalOverlay.classList.contains('is-hidden')) {
+                initModalCalendar();
+            }
+        } else {
+            // Auf Detailseite ohne Modal: klassischer Inline-Flatpickr
+            const defaultStart = inlineStart.value ? isoToDisplay(inlineStart.value) : '';
+            const defaultEnd = inlineEnd.value ? isoToDisplay(inlineEnd.value) : '';
+            const defaultDates = defaultStart && defaultEnd ? (defaultStart === defaultEnd ? defaultStart : [defaultStart, defaultEnd]) : null;
+
+            inlineCalendarInstance = flatpickr(inlineInput, {
                 mode: 'range',
                 minDate: 'today',
                 dateFormat: 'd.m.Y',
                 locale: flatpickrLocale,
-                inline: true,
+                allowInput: true,
                 defaultDate: defaultDates,
                 onChange: onFlatpickrChange
             });
+
+            // Ganzes Detail-Date-Card öffnet den Kalender
+            const detailDateCard = inlineInput.closest('.detail-date-card');
+            if (detailDateCard && inlineCalendarInstance) {
+                detailDateCard.addEventListener('click', function(e) {
+                    if (e.target === inlineInput || inlineInput.contains(e.target)) return;
+                    e.preventDefault();
+                    inlineCalendarInstance.open();
+                });
+            }
         }
     }
 
@@ -347,7 +432,9 @@ function initDateSelector() {
                 const start = modalStart ? modalStart.value : '';
                 const end = modalEnd ? modalEnd.value : '';
                 if (start && end) {
-                    saveDates(start, end);
+                    saveDates(start, end).then(function() {
+                        window.location.reload();
+                    });
                 }
                 closeModal();
             });
@@ -417,8 +504,7 @@ function initInquiryButtons() {
             const jukeboxId = this.dataset.jukeboxId;
 
             if (this.classList.contains('in-list')) {
-                removeFromInquiryList(jukeboxId);
-                updateInquiryButton(this, false);
+                window.location.href = 'contact.php';
                 return;
             }
 
@@ -464,7 +550,7 @@ function updateInquiryButton(button, inList) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M20 6L9 17l-5-5"/>
             </svg>
-            <span>${button.dataset.textRemove || 'Entfernen'}</span>
+            <span>${button.dataset.textRemove || 'Zum Warenkorb'}</span>
         `;
     } else {
         button.classList.remove('in-list');
@@ -908,4 +994,257 @@ if ('IntersectionObserver' in window) {
     });
     
     lazyImages.forEach(img => imageObserver.observe(img));
+}
+
+
+// ============================================
+// INFO-TOOLTIPS (z. B. Vertragsgebühr)
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    initInfoTooltips();
+});
+
+function initInfoTooltips() {
+    const toggles = document.querySelectorAll('.info-tooltip-toggle');
+    
+    toggles.forEach(function(toggle) {
+        toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const targetId = toggle.getAttribute('data-info-target');
+            const tooltip = targetId ? document.getElementById(targetId) : null;
+            
+            if (!tooltip) return;
+            
+            const isVisible = tooltip.classList.contains('visible');
+            
+            // Alle anderen Tooltips schließen
+            document.querySelectorAll('.info-tooltip-text.visible').forEach(function(el) {
+                el.classList.remove('visible');
+            });
+            
+            if (!isVisible) {
+                tooltip.classList.add('visible');
+            }
+        });
+    });
+    
+    // Schließen beim Klick außerhalb
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.info-tooltip-toggle')) {
+            document.querySelectorAll('.info-tooltip-text.visible').forEach(function(el) {
+                el.classList.remove('visible');
+            });
+        }
+    });
+    
+    // Schließen mit Escape-Taste
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.info-tooltip-text.visible').forEach(function(el) {
+                el.classList.remove('visible');
+            });
+        }
+    });
+}
+
+// ============================================
+// HIGHLIGHTS-KARUSELL (Startseite) - Endlosschleife
+// ============================================
+function initCarousel() {
+    const carousels = document.querySelectorAll('[data-carousel]');
+    
+    carousels.forEach(function(carousel) {
+        const track = carousel.querySelector('.jukebox-carousel-track');
+        
+        if (!track) return;
+        
+        // Originale Items speichern und klonen
+        const originalItems = Array.from(track.querySelectorAll('.jukebox-carousel-item'));
+        const originalCount = originalItems.length;
+        
+        if (originalCount === 0) return;
+        
+        // Prepend- und Append-Klone erstellen, um eine nahtlose Endlosschleife zu ermöglichen
+        const prependItems = originalItems.map(function(item) {
+            return item.cloneNode(true);
+        }).reverse();
+        const appendItems = originalItems.map(function(item) {
+            return item.cloneNode(true);
+        });
+        
+        prependItems.forEach(function(item) {
+            track.insertBefore(item, track.firstChild);
+        });
+        appendItems.forEach(function(item) {
+            track.appendChild(item);
+        });
+        
+        // Jetzt: [Klon-Prepend] [Original] [Klon-Append]
+        const items = track.querySelectorAll('.jukebox-carousel-item');
+        const prevBtn = carousel.querySelector('.jukebox-carousel-prev');
+        const nextBtn = carousel.querySelector('.jukebox-carousel-next');
+        
+        function getItemsPerView() {
+            const width = window.innerWidth;
+            if (width >= 1024) return 3;
+            if (width >= 640) return 2;
+            return 1;
+        }
+        
+        const originalStartItem = items[originalCount];
+        const appendStartItem = items[originalCount * 2];
+        const originalTrackWidth = appendStartItem.offsetLeft - originalStartItem.offsetLeft;
+        const itemWidth = originalTrackWidth / originalCount;
+        
+        // Auf den Anfang des Original-Sets scrollen
+        track.scrollLeft = originalStartItem.offsetLeft - track.offsetLeft;
+        
+        function getActiveIndex() {
+            let relativeScroll = track.scrollLeft - originalTrackWidth;
+            
+            // In den Bereich des Original-Sets normalisieren
+            while (relativeScroll < 0) relativeScroll += originalTrackWidth;
+            while (relativeScroll >= originalTrackWidth) relativeScroll -= originalTrackWidth;
+            
+            let closestIndex = 0;
+            let closestDistance = Infinity;
+            
+            for (let i = 0; i < originalCount; i++) {
+                const item = items[originalCount + i];
+                const itemOffset = item.offsetLeft - originalStartItem.offsetLeft;
+                const distance = Math.abs(itemOffset - relativeScroll);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestIndex = i;
+                }
+            }
+            
+            return closestIndex;
+        }
+        
+        function scrollToIndex(index) {
+            const targetItem = items[originalCount + index];
+            if (!targetItem) return;
+            track.scrollTo({
+                left: targetItem.offsetLeft - track.offsetLeft,
+                behavior: 'smooth'
+            });
+        }
+        
+        function moveBy(direction) {
+            const currentScroll = track.scrollLeft;
+            const currentRelativeIndex = Math.round((currentScroll - originalTrackWidth) / itemWidth);
+            const newIndex = currentRelativeIndex + direction;
+            const targetItem = items[originalCount + newIndex];
+            if (!targetItem) return;
+            
+            track.scrollTo({
+                left: targetItem.offsetLeft - track.offsetLeft,
+                behavior: 'smooth'
+            });
+        }
+        
+        function updateButtons() {
+            if (!prevBtn || !nextBtn) return;
+            prevBtn.disabled = false;
+            nextBtn.disabled = false;
+        }
+        
+        if (prevBtn) {
+            prevBtn.addEventListener('click', function() {
+                moveBy(-1);
+                resetAutoplay();
+            });
+        }
+        
+        if (nextBtn) {
+            nextBtn.addEventListener('click', function() {
+                moveBy(1);
+                resetAutoplay();
+            });
+        }
+        
+        // Loop-Reset beim Scrollen
+        let isReseting = false;
+        track.addEventListener('scroll', function() {
+            if (isReseting) return;
+            
+            window.requestAnimationFrame(updateButtons);
+            
+            // Prüfen, ob wir in die Append- oder Prepend-Klone gescrollt sind
+            if (track.scrollLeft <= 0) {
+                isReseting = true;
+                track.style.scrollBehavior = 'auto';
+                track.scrollLeft += originalTrackWidth;
+                track.style.scrollBehavior = '';
+                setTimeout(function() { isReseting = false; }, 50);
+                return;
+            }
+            
+            if (track.scrollLeft >= 2 * originalTrackWidth) {
+                isReseting = true;
+                track.style.scrollBehavior = 'auto';
+                track.scrollLeft -= originalTrackWidth;
+                track.style.scrollBehavior = '';
+                setTimeout(function() { isReseting = false; }, 50);
+                return;
+            }
+            
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(function() {
+                updateButtons();
+            }, 150);
+        }, { passive: true });
+        
+        // ============================================
+        // AUTOPLAY
+        // ============================================
+        let autoplayInterval;
+        let autoplayPaused = false;
+        let scrollTimeout;
+        const autoplayDelay = 5000; // 5 Sekunden
+        
+        function startAutoplay() {
+            stopAutoplay();
+            autoplayInterval = setInterval(function() {
+                if (autoplayPaused) return;
+                moveBy(1);
+            }, autoplayDelay);
+        }
+        
+        function stopAutoplay() {
+            if (autoplayInterval) {
+                clearInterval(autoplayInterval);
+                autoplayInterval = null;
+            }
+        }
+        
+        function resetAutoplay() {
+            stopAutoplay();
+            startAutoplay();
+        }
+        
+        // Pause bei Hover/Touch/Interaktion
+        carousel.addEventListener('mouseenter', function() {
+            autoplayPaused = true;
+        });
+        
+        carousel.addEventListener('mouseleave', function() {
+            autoplayPaused = false;
+        });
+        
+        carousel.addEventListener('touchstart', function() {
+            autoplayPaused = true;
+        }, { passive: true });
+        
+        carousel.addEventListener('touchend', function() {
+            resetAutoplay();
+        }, { passive: true });
+        
+        // Initiale States
+        updateButtons();
+        startAutoplay();
+    });
 }

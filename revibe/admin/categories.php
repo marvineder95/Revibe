@@ -74,62 +74,6 @@ include PARTIALS_PATH . 'admin-header.php';
 
             <div class="admin-card" style="margin-bottom: var(--space-8);">
                 <div class="admin-card-header">
-                    <h2 style="font-size: var(--text-xl); margin-bottom: 0;"><?php echo $editCategory ? 'Kategorie bearbeiten' : 'Neue Kategorie'; ?></h2>
-                </div>
-                <div class="admin-card-body">
-                    <form method="POST" action="">
-                        <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
-                        <?php if ($editCategory): ?>
-                        <input type="hidden" name="id" value="<?php echo e($editCategory['id']); ?>">
-                        <?php endif; ?>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label">Name (DE) *</label>
-                                <input type="text" name="name" class="form-input" value="<?php echo e($editCategory['name'] ?? ''); ?>" required>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Name (EN)</label>
-                                <input type="text" name="name_en" class="form-input" value="<?php echo e($editCategory['name_en'] ?? ''); ?>">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label">Farbe</label>
-                                <input type="color" name="color" class="form-input" style="height: 40px; padding: 2px;" value="<?php echo e($editCategory['color'] ?? '#0066B1'); ?>">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Sortierung</label>
-                                <input type="number" name="sort_order" class="form-input" value="<?php echo e($editCategory['sort_order'] ?? 0); ?>">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label">Beschreibung (DE)</label>
-                                <textarea name="description" class="form-textarea" rows="2"><?php echo e($editCategory['description'] ?? ''); ?></textarea>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Beschreibung (EN)</label>
-                                <textarea name="description_en" class="form-textarea" rows="2"><?php echo e($editCategory['description_en'] ?? ''); ?></textarea>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-checkbox">
-                                <input type="checkbox" name="active" <?php echo (!isset($editCategory) || !empty($editCategory['active'])) ? 'checked' : ''; ?>>
-                                <span>Aktiv</span>
-                            </label>
-                        </div>
-                        <div style="display: flex; gap: var(--space-4); margin-top: var(--space-4);">
-                            <button type="submit" class="btn btn-primary">Speichern</button>
-                            <?php if ($editCategory): ?>
-                            <a href="/admin/categories.php" class="btn btn-dark">Abbrechen</a>
-                            <?php endif; ?>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            <div class="admin-card">
-                <div class="admin-card-header">
                     <h2 style="font-size: var(--text-xl); margin-bottom: 0;">Kategorien</h2>
                 </div>
                 <div class="admin-card-body">
@@ -156,5 +100,79 @@ include PARTIALS_PATH . 'admin-header.php';
                     </table>
                 </div>
             </div>
+
+            <button type="button" id="toggle-category-form" class="btn btn-primary" style="margin-bottom: var(--space-8);"><?php echo $editCategory ? 'Formular schließen' : 'Neue Kategorie erstellen'; ?></button>
+
+            <div id="category-form-wrapper" style="display: <?php echo $editCategory ? 'block' : 'none'; ?>;">
+                <div class="admin-card">
+                    <div class="admin-card-header">
+                        <h2 style="font-size: var(--text-xl); margin-bottom: 0;"><?php echo $editCategory ? 'Kategorie bearbeiten' : 'Neue Kategorie'; ?></h2>
+                    </div>
+                    <div class="admin-card-body">
+                        <form method="POST" action="">
+                            <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
+                            <?php if ($editCategory): ?>
+                            <input type="hidden" name="id" value="<?php echo e($editCategory['id']); ?>">
+                            <?php endif; ?>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Name (DE) *</label>
+                                    <input type="text" name="name" class="form-input" value="<?php echo e($editCategory['name'] ?? ''); ?>" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Name (EN)</label>
+                                    <input type="text" name="name_en" class="form-input" value="<?php echo e($editCategory['name_en'] ?? ''); ?>">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Farbe</label>
+                                    <input type="color" name="color" class="form-input" style="height: 40px; padding: 2px;" value="<?php echo e($editCategory['color'] ?? '#0066B1'); ?>">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Sortierung</label>
+                                    <input type="number" name="sort_order" class="form-input" value="<?php echo e($editCategory['sort_order'] ?? 0); ?>">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Beschreibung (DE)</label>
+                                    <textarea name="description" class="form-textarea" rows="2"><?php echo e($editCategory['description'] ?? ''); ?></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Beschreibung (EN)</label>
+                                    <textarea name="description_en" class="form-textarea" rows="2"><?php echo e($editCategory['description_en'] ?? ''); ?></textarea>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-checkbox">
+                                    <input type="checkbox" name="active" <?php echo (!isset($editCategory) || !empty($editCategory['active'])) ? 'checked' : ''; ?>>
+                                    <span>Aktiv</span>
+                                </label>
+                            </div>
+                            <div style="display: flex; gap: var(--space-4); margin-top: var(--space-4);">
+                                <button type="submit" class="btn btn-primary">Speichern</button>
+                                <?php if ($editCategory): ?>
+                                <a href="/admin/categories.php" class="btn btn-dark">Abbrechen</a>
+                                <?php endif; ?>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+<script>
+(function() {
+    var toggle = document.getElementById('toggle-category-form');
+    var wrapper = document.getElementById('category-form-wrapper');
+    if (toggle && wrapper) {
+        toggle.addEventListener('click', function() {
+            var isHidden = wrapper.style.display === 'none';
+            wrapper.style.display = isHidden ? 'block' : 'none';
+            toggle.textContent = isHidden ? 'Formular schließen' : 'Neue Kategorie erstellen';
+        });
+    }
+})();
+</script>
 
 <?php include PARTIALS_PATH . 'admin-footer.php'; ?>

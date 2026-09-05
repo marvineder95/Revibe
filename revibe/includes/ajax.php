@@ -233,7 +233,7 @@ switch ($action) {
 
         // Transport berechnen
         if (!empty($address)) {
-            $transport = calculateTransportCosts($address);
+            $transport = calculateTransportCosts($address, getCartItems());
             cartSetTransportData($transport['distance_km'], $transport['duration_min'], $transport['error']);
         }
 
@@ -308,7 +308,7 @@ switch ($action) {
         $availability = checkCartAvailability(getCart());
 
         if (!empty($address)) {
-            $transport = calculateTransportCosts($address);
+            $transport = calculateTransportCosts($address, getCartItems());
             cartSetTransportData($transport['distance_km'], $transport['duration_min'], $transport['error']);
         }
 
@@ -316,12 +316,28 @@ switch ($action) {
         include PARTIALS_PATH . 'pricing-compact.php';
         $pricingHtml = ob_get_clean();
 
+        $availabilityDetails = [];
+        if (!$availability['available']) {
+            foreach ($availability['conflicts'] as $jukeboxId => $conflicts) {
+                $jukebox = getJukeboxById($jukeboxId);
+                if (!$jukebox) continue;
+                foreach ($conflicts as $conflict) {
+                    $availabilityDetails[] = [
+                        'name' => getLocalizedValue($jukebox, 'name'),
+                        'start' => date('d.m.Y', strtotime($conflict['date_start'])),
+                        'end' => date('d.m.Y', strtotime($conflict['date_end']))
+                    ];
+                }
+            }
+        }
+
         header('Content-Type: application/json');
         echo json_encode([
             'success' => true,
             'pricingHtml' => $pricingHtml,
             'available' => $availability['available'],
-            'availabilityMessage' => $availability['available'] ? '' : __('cart_item_not_available')
+            'availabilityMessage' => $availability['available'] ? '' : __('cart_item_not_available'),
+            'availabilityDetails' => $availabilityDetails
         ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
         break;
 

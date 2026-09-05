@@ -12,7 +12,7 @@ $metaData = [
 ];
 
 // Featured Jukeboxen laden
-$featuredJukeboxes = getFeaturedJukeboxes(3);
+$featuredJukeboxes = getFeaturedJukeboxes(99, false);
 
 include PARTIALS_PATH . 'header.php';
 ?>
@@ -68,49 +68,66 @@ include PARTIALS_PATH . 'header.php';
         </div>
         
         <?php if (!empty($featuredJukeboxes)): ?>
-        <div class="jukebox-grid">
-            <?php foreach ($featuredJukeboxes as $jukebox): ?>
-            <article class="jukebox-card reveal">
-                <div class="jukebox-card-image">
-                    <img src="<?php echo getJukeboxImageUrl($jukebox['main_image']); ?>" 
-                         alt="<?php echo e(getLocalizedValue($jukebox, 'name')); ?>"
-                         onerror="this.src='https://images.unsplash.com/photo-1514525253440-b393452e8d26?w=600&q=80'">
-                    <?php if (!empty($jukebox['featured'])): ?>
-                    <span class="jukebox-card-badge">Highlight</span>
-                    <?php endif; ?>
-                    <div class="jukebox-card-overlay">
-                        <a href="<?php echo BASE_URL; ?>jukebox.php?id=<?php echo $jukebox['id']; ?>" class="btn btn-primary">
-                            <?php echo __('view_details'); ?>
-                        </a>
-                    </div>
-                </div>
-                <div class="jukebox-card-content">
-                    <div class="jukebox-card-header">
-                        <div>
-                            <h3 class="jukebox-card-title"><?php echo e(getLocalizedValue($jukebox, 'name')); ?></h3>
-                            <p class="jukebox-card-subtitle"><?php echo e($jukebox['manufacturer']); ?> <?php echo e($jukebox['model']); ?></p>
-                        </div>
-                        <div class="jukebox-card-price">
-                            <?php echo formatPrice($jukebox['price_day']); ?>
+        <div class="jukebox-carousel" data-carousel>
+            <button class="jukebox-carousel-arrow jukebox-carousel-prev" type="button" aria-label="Vorheriges Highlight">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <div class="jukebox-carousel-track">
+                <?php foreach ($featuredJukeboxes as $jukebox): ?>
+                <article class="jukebox-card jukebox-carousel-item">
+                    <div class="jukebox-card-image">
+                        <img src="<?php echo getJukeboxImageUrl($jukebox['main_image']); ?>" 
+                             alt="<?php echo e(getLocalizedValue($jukebox, 'name')); ?>"
+                             onerror="this.src='https://images.unsplash.com/photo-1514525253440-b393452e8d26?w=600&q=80'">
+                        <?php if (!empty($jukebox['featured'])): ?>
+                        <span class="jukebox-card-badge jukebox-card-badge-highlight">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                            Highlight
+                        </span>
+                        <?php endif; ?>
+                        <div class="jukebox-card-overlay">
+                            <a href="<?php echo BASE_URL; ?>jukebox.php?id=<?php echo $jukebox['id']; ?>" class="btn btn-primary">
+                                <?php echo __('view_details'); ?>
+                            </a>
                         </div>
                     </div>
-                    <p class="jukebox-card-description">
-                        <?php echo e(getLocalizedValue($jukebox, 'short_description')); ?>
-                    </p>
-                    <div class="jukebox-card-actions">
-                        <a href="<?php echo BASE_URL; ?>jukebox.php?id=<?php echo $jukebox['id']; ?>" class="btn btn-dark btn-sm">
-                            <?php echo __('view_details'); ?>
-                        </a>
-                        <button class="btn btn-primary btn-sm inquiry-btn" 
-                                data-jukebox-id="<?php echo $jukebox['id']; ?>"
-                                data-text-add="<?php echo __('add_to_inquiry'); ?>"
-                                data-text-remove="<?php echo __('remove_from_inquiry'); ?>">
-                            <?php echo __('add_to_inquiry'); ?>
-                        </button>
+                    <div class="jukebox-card-content">
+                        <div class="jukebox-card-header">
+                            <div>
+                                <h3 class="jukebox-card-title"><?php echo e(getLocalizedValue($jukebox, 'name')); ?></h3>
+                                <?php if (!empty($jukebox['tags'])): ?>
+                                <div class="jukebox-card-tags">
+                                    <?php foreach ($jukebox['tags'] as $tag): ?>
+                                    <?php echo renderJukeboxTag($tag); ?>
+                                    <?php endforeach; ?>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                            <div class="jukebox-card-price">
+                                <?php echo formatPrice($jukebox['price_day']); ?>
+                            </div>
+                        </div>
+                        <p class="jukebox-card-description">
+                            <?php echo e(getLocalizedValue($jukebox, 'short_description')); ?>
+                        </p>
+                        <div class="jukebox-card-actions">
+                            <a href="<?php echo BASE_URL; ?>jukebox.php?id=<?php echo $jukebox['id']; ?>" class="btn btn-dark btn-sm">
+                                <?php echo __('view_details'); ?>
+                            </a>
+                            <button class="btn btn-primary btn-sm inquiry-btn inquiry-btn-compact" 
+                                    data-jukebox-id="<?php echo $jukebox['id']; ?>"
+                                    data-text-add="<?php echo __('add_to_inquiry_short'); ?>"
+                                    data-text-remove="<?php echo __('remove_from_inquiry'); ?>">
+                                <?php echo __('add_to_inquiry_short'); ?>
+                            </button>
+                        </div>
                     </div>
-                </div>
-            </article>
-            <?php endforeach; ?>
+                </article>
+                <?php endforeach; ?>
+            </div>
+            <button class="jukebox-carousel-arrow jukebox-carousel-next" type="button" aria-label="Nächstes Highlight">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
         </div>
         
         <div class="text-center mt-8 reveal">
@@ -189,6 +206,16 @@ include PARTIALS_PATH . 'header.php';
             <div class="benefit-card reveal">
                 <div class="benefit-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                </div>
+                <h3><?php echo __('benefit_3_title'); ?></h3>
+                <p><?php echo __('benefit_3_text'); ?></p>
+            </div>
+            <div class="benefit-card reveal">
+                <div class="benefit-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
                         <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
                         <line x1="9" y1="9" x2="9.01" y2="9"></line>
@@ -212,16 +239,6 @@ include PARTIALS_PATH . 'header.php';
             <div class="benefit-card reveal">
                 <div class="benefit-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                        <circle cx="12" cy="12" r="3"></circle>
-                    </svg>
-                </div>
-                <h3><?php echo __('benefit_3_title'); ?></h3>
-                <p><?php echo __('benefit_3_text'); ?></p>
-            </div>
-            <div class="benefit-card reveal">
-                <div class="benefit-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
                         <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
                         <path d="M4 22h16"></path>
@@ -236,49 +253,143 @@ include PARTIALS_PATH . 'header.php';
 </section>
 
 <!-- Process Section -->
-<section class="section section-fullheight process">
+<section class="section process">
     <div class="container">
         <div class="section-header reveal">
             <h2><?php echo __('process_title'); ?></h2>
         </div>
         
-        <div class="process-steps">
-            <div class="process-step reveal">
-                <div class="process-step-number"><?php echo __('process_step_1_number'); ?></div>
-                <h3><?php echo __('process_step_1_title'); ?></h3>
-                <p><?php echo __('process_step_1_text'); ?></p>
+        <div class="process-steps-new">
+            <!-- Step 1 -->
+            <div class="process-step-card reveal">
+                <div class="process-step-header">
+                    <span class="process-step-number"><?php echo __('process_step_1_number'); ?></span>
+                    <h3><?php echo __('process_step_1_title'); ?></h3>
+                </div>
+                <div class="process-step-body">
+                    <div class="process-step-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M2 10v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V10M2 10l10-6 10 6"/>
+                            <path d="M12 22V12"/>
+                            <circle cx="12" cy="7" r="2"/>
+                        </svg>
+                    </div>
+                    <p><?php echo __('process_step_1_text'); ?></p>
+                </div>
             </div>
-            <div class="process-step reveal">
-                <div class="process-step-number"><?php echo __('process_step_2_number'); ?></div>
-                <h3><?php echo __('process_step_2_title'); ?></h3>
-                <p><?php echo __('process_step_2_text'); ?></p>
+
+            <!-- Step 2 -->
+            <div class="process-step-card reveal">
+                <div class="process-step-header">
+                    <span class="process-step-number"><?php echo __('process_step_2_number'); ?></span>
+                    <h3><?php echo __('process_step_2_title'); ?></h3>
+                </div>
+                <div class="process-step-body">
+                    <div class="process-step-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                    </div>
+                    <p><?php echo __('process_step_2_text'); ?></p>
+                </div>
             </div>
-            <div class="process-step reveal">
-                <div class="process-step-number"><?php echo __('process_step_3_number'); ?></div>
-                <h3><?php echo __('process_step_3_title'); ?></h3>
-                <p><?php echo __('process_step_3_text'); ?></p>
+
+            <!-- Step 3 -->
+            <div class="process-step-card reveal">
+                <div class="process-step-header">
+                    <span class="process-step-number"><?php echo __('process_step_3_number'); ?></span>
+                    <h3><?php echo __('process_step_3_title'); ?></h3>
+                </div>
+                <div class="process-step-body">
+                    <div class="process-step-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10 9 9 9 8 9"/>
+                        </svg>
+                    </div>
+                    <p><?php echo __('process_step_3_text'); ?></p>
+                </div>
             </div>
-            <div class="process-step reveal">
-                <div class="process-step-number"><?php echo __('process_step_4_number'); ?></div>
-                <h3><?php echo __('process_step_4_title'); ?></h3>
-                <p><?php echo __('process_step_4_text'); ?></p>
+
+            <!-- Step 4 -->
+            <div class="process-step-card reveal">
+                <div class="process-step-header">
+                    <span class="process-step-number"><?php echo __('process_step_4_number'); ?></span>
+                    <h3><?php echo __('process_step_4_title'); ?></h3>
+                </div>
+                <div class="process-step-body">
+                    <div class="process-step-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="1" y="3" width="15" height="13"/>
+                            <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+                            <circle cx="5.5" cy="18.5" r="2.5"/>
+                            <circle cx="18.5" cy="18.5" r="2.5"/>
+                        </svg>
+                    </div>
+                    <p><?php echo __('process_step_4_text'); ?></p>
+                </div>
             </div>
-            <div class="process-step reveal">
-                <div class="process-step-number"><?php echo __('process_step_5_number'); ?></div>
-                <h3><?php echo __('process_step_5_title'); ?></h3>
-                <p><?php echo __('process_step_5_text'); ?></p>
+
+            <!-- Step 5 -->
+            <div class="process-step-card reveal">
+                <div class="process-step-header">
+                    <span class="process-step-number"><?php echo __('process_step_5_number'); ?></span>
+                    <h3><?php echo __('process_step_5_title'); ?></h3>
+                </div>
+                <div class="process-step-body">
+                    <div class="process-step-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                        </svg>
+                    </div>
+                    <p><?php echo __('process_step_5_text'); ?></p>
+                </div>
             </div>
-            <div class="process-step reveal">
-                <div class="process-step-number"><?php echo __('process_step_6_number'); ?></div>
-                <h3><?php echo __('process_step_6_title'); ?></h3>
-                <p><?php echo __('process_step_6_text'); ?></p>
+
+            <!-- Step 6 -->
+            <div class="process-step-card reveal">
+                <div class="process-step-header">
+                    <span class="process-step-number"><?php echo __('process_step_6_number'); ?></span>
+                    <h3><?php echo __('process_step_6_title'); ?></h3>
+                </div>
+                <div class="process-step-body">
+                    <div class="process-step-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                        </svg>
+                    </div>
+                    <p><?php echo __('process_step_6_text'); ?></p>
+                </div>
             </div>
         </div>
-        
-        <div class="text-center mt-8 reveal">
-            <a href="<?php echo BASE_URL; ?>process.php" class="btn btn-secondary">
-                <?php echo getCurrentLanguage() === 'de' ? 'Mehr zum Ablauf' : 'More about the process'; ?>
-            </a>
+
+        <div class="process-hero-cta reveal">
+            <div class="process-cta-card">
+                <div class="process-cta-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                </div>
+                <div class="process-cta-text">
+                    <h3><?php echo __('process_cta_title'); ?></h3>
+                    <p><?php echo __('process_cta_text'); ?></p>
+                </div>
+                <a href="<?php echo BASE_URL; ?>contact.php" class="btn btn-primary btn-lg">
+                    <?php echo __('process_cta_button'); ?>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
         </div>
     </div>
 </section>

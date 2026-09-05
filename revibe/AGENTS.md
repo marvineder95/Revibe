@@ -15,7 +15,7 @@ Das Projekt liegt im Unterverzeichnis `revibe/`. Alle Pfade in dieser Dokumentat
 
 - **Anfragekorb (Cart):** Session-basiert (`$_SESSION['jukebox_cart']`), mit synchronisiertem Cookie-Fallback (`jukebox_inquiry`) für die Sidebar.
 - **Datumsauswahl:** Kunden müssen vor dem Hinzufügen einer Jukebox zum Warenkorb einen Mietzeitraum wählen. Die Verfügbarkeit wird per AJAX geprüft.
-- **Live-Preisvorschau:** Berechnet Mietkosten, Mietdauer-/Mengenrabatte, Coupon-Rabatte, Transportkosten, USt. und die gesetzliche österreichische Vertragsgebühr (§ 33 TP 5 GebG 1957, 1 % des Bruttowertes) auf `request.php` und `contact.php`.
+- **Live-Preisvorschau:** Berechnet Mietkosten, Mietdauer-/Mengenrabatte, Coupon-Rabatte, Transportkosten, USt. und die gesetzliche österreichische Vertragsgebühr (§ 33 TP 5 GebG 1957, 1 % des Bruttowertes) auf `contact.php`.
 - **Produktkategorien:** Jukeboxen können Kategorien mit Farbe/Sortierung zugeordnet werden.
 - **Rabattlogik:** Zwei Regeltypen in `discount_rules` – Mietdauer-Rabatt (`duration`) und Mengenrabatt (`quantity`).
 - **Coupon-System:** Gültigkeitszeitraum, Mindestbestellwert, Mehrfachverwendung (`reusable`) und Kombinierbarkeit (`combinable`).
@@ -104,9 +104,9 @@ revibe/
 ├── index.php               # Startseite
 ├── catalog.php             # Katalog-Übersicht
 ├── jukebox.php             # Detailseite einer Jukebox
-├── request.php             # Anfragekorb + Preisvorschau
+├── request.php             # Veraltet – leitet auf contact.php weiter
 ├── process.php             # Mietablauf-Seite
-├── contact.php             # Kontaktformular + finale Preisübersicht
+├── contact.php             # Warenkorb + Kontaktformular + finale Preisübersicht
 ├── offer.php               # Öffentliche Angebotsseite (Annehmen/Ablehnen)
 ├── about.php               # Über-uns-Seite
 ├── faq.php                 # FAQ-Seite
@@ -406,9 +406,9 @@ Beim ersten Aufruf prüft `jukebox-model.php` automatisch, ob eine alte `data/ju
 - **Speicherort:** `$_SESSION['jukebox_cart']`
 - **Inhalt:** `items` (Array von Jukebox-IDs), `date_start`, `date_end`, `duration_days`, `event_address`, `coupon_code`, Transportdaten (`transport_calculated`, `transport_distance_km`, `transport_duration_min`, `transport_error`)
 - **Legacy-Cookie `jukebox_inquiry`:** Wird weiterhin als Fallback für die Sidebar synchronisiert (30 Tage Laufzeit, `SameSite=Lax`, `httponly`).
-- **Warenkorb-Seite:** `request.php`
+- **Warenkorb-Seite:** `contact.php`
 - **AJAX-Endpunkte:** `includes/ajax.php` mit Actions `cartAdd`, `cartRemove`, `cartGet`, `updateCart`, `updateCartContact`, `getCartItems`, `checkAvailability`, `setCartDates`
-- **Verfügbarkeitsprüfung:** `cartAdd` prüft vor dem Hinzufügen, ob die Jukebox im gewählten Zeitraum verfügbar ist. `request.php` und `contact.php` prüfen die Verfügbarkeit aller Cart-Items und blockieren den Abschluss bei Konflikten.
+- **Verfügbarkeitsprüfung:** `cartAdd` prüft vor dem Hinzufügen, ob die Jukebox im gewählten Zeitraum verfügbar ist. `contact.php` prüft die Verfügbarkeit aller Cart-Items und blockiert den Abschluss bei Konflikten.
 
 ---
 
@@ -425,7 +425,7 @@ Bestandteile:
 5. Transportkosten (netto, nicht rabattfähig)
 6. USt. auf Gesamt-Netto
 7. Brutto-Gesamtsumme
-8. Vertragsgebühr (1 % des Bruttowertes, falls aktiviert und Bemessungsgrundlage > 150 €)
+8. Vertragsgebühr (1 % der Bruttomiete – ohne Transport/Nebenkosten; falls aktiviert und Bemessungsgrundlage > 150 €)
 9. Endbetrag inkl. Vertragsgebühr
 
 Rabatte sind kumulativ und werden sequentiell abgezogen.

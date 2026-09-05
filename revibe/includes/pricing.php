@@ -14,9 +14,10 @@ require_once __DIR__ . '/coupons-model.php';
  * @param int   $days       Mietdauer in Tagen
  * @param string $couponCode Optionaler Coupon-Code
  * @param float $transportCosts Transportkosten (bereits berechnet)
+ * @param array $customItems Zusätzliche Positionen (['name', 'unit_price', 'quantity']), netto & nicht rabattfähig
  * @return array Preisaufstellung
  */
-function calculatePricing($cartItems, $days, $couponCode = '', $transportCosts = 0) {
+function calculatePricing($cartItems, $days, $couponCode = '', $transportCosts = 0, $customItems = []) {
     $settings = getAllSettings();
     $taxRate = (float)($settings['tax_rate'] ?? DEFAULT_SETTINGS['tax_rate']);
     
@@ -68,21 +69,46 @@ function calculatePricing($cartItems, $days, $couponCode = '', $transportCosts =
     
     // 4. Transportkosten (immer netto, nicht rabattfähig)
     $transportNet = max(0, (float)$transportCosts);
-    
+
+    // 4b. Zusätzliche Positionen (netto, nicht rabattfähig)
+    $customNet = 0;
+    $customDetails = [];
+    foreach ((array)$customItems as $ci) {
+        $unitPrice = max(0, (float)($ci['unit_price'] ?? 0));
+        $quantity = max(0, (float)($ci['quantity'] ?? 0));
+        if ($unitPrice <= 0 || $quantity <= 0) {
+            continue;
+        }
+        $lineTotal = round($unitPrice * $quantity, 2);
+        $customNet += $lineTotal;
+        $customDetails[] = [
+            'name' => $ci['name'] ?? '',
+            'unit_price' => $unitPrice,
+            'quantity' => $quantity,
+            'total' => $lineTotal
+        ];
+    }
+    $customNet = round($customNet, 2);
+
     // 5. Gesamtsumme netto
-    $totalNet = $rentalNet + $transportNet;
+    $totalNet = $rentalNet + $transportNet + $customNet;
     
     // 6. USt und Brutto
     $taxAmount = round($totalNet * ($taxRate / 100), 2);
     $totalGross = $totalNet + $taxAmount;
 
     // 7. Gesetzliche Vertragsgebühr (§ 33 TP 5 GebG 1957)
+    // Bemessungsgrundlage ist ausschließlich die Bruttomiete – nicht Transport,
+    // Arbeitszeiten, Kilometerpauschalen oder sonstige Nebenkosten.
     $contractFeeEnabled = !empty($settings['contract_fee_enabled']) && (int)$settings['contract_fee_enabled'] === 1;
     $contractFeePercent = (float)($settings['contract_fee_percent'] ?? DEFAULT_SETTINGS['contract_fee_percent']);
     $contractFeeAmount = 0;
 
-    if ($contractFeeEnabled && $contractFeePercent > 0 && $totalGross > 150) {
-        $contractFeeAmount = round($totalGross * ($contractFeePercent / 100), 2);
+    $rentalTaxAmount = round($rentalNet * ($taxRate / 100), 2);
+    $rentalGross = $rentalNet + $rentalTaxAmount;
+
+    if ($contractFeeEnabled && $contractFeePercent > 0 && $rentalGross > 150) {
+        $contractFeeAmount = round($rentalGross * ($contractFeePercent / 100), 2);
     }
 
     $totalWithFee = $totalGross + $contractFeeAmount;
@@ -101,6 +127,8 @@ function calculatePricing($cartItems, $days, $couponCode = '', $transportCosts =
         'coupon_discount_amount' => $couponDiscountAmount,
         'rental_net' => $rentalNet,
         'transport_net' => $transportNet,
+        'custom_net' => $customNet,
+        'custom_items' => $customDetails,
         'total_net' => $totalNet,
         'tax_rate' => $taxRate,
         'tax_amount' => $taxAmount,

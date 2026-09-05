@@ -24,6 +24,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['invoice_id']) && !em
                 redirect('/admin/invoices.php?error=invoice_paid');
             }
         }
+
+        if ($action === 'send_invoice') {
+            $invoice = getInvoiceById($invoiceId);
+            if (!$invoice) {
+                redirect('/admin/invoices.php?error=invoice_not_found');
+            }
+
+            $inquiry = getInquiryById($invoice['inquiry_id']);
+            if (!$inquiry) {
+                redirect('/admin/invoices.php?error=invoice_not_found');
+            }
+
+            if (sendInvoiceEmail($invoice, $inquiry)) {
+                redirect('/admin/invoices.php?success=invoice_sent');
+            } else {
+                redirect('/admin/invoices.php?error=invoice_send');
+            }
+        }
     } else {
         redirect('/admin/invoices.php?error=csrf');
     }
@@ -35,6 +53,7 @@ $error = $_GET['error'] ?? '';
 $invoices = getAllInvoices();
 $totalRevenue = getTotalRevenue();
 $openRevenue = getOpenRevenue();
+$paidRevenue = $totalRevenue - $openRevenue;
 $lang = getCurrentLanguage();
 $pageTitle = __('admin_invoices_title');
 
@@ -75,15 +94,37 @@ include PARTIALS_PATH . 'admin-header.php';
             <?php endif; ?>
 
             <!-- Umsatz-Übersicht -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-8);">
-                <div style="background: var(--color-cream); padding: var(--space-5); border-radius: var(--radius-lg); text-align: center;">
-                    <p style="font-size: var(--text-3xl); font-weight: 700; color: var(--color-primary); margin-bottom: var(--space-2);"><?php echo formatMoney($totalRevenue); ?></p>
-                    <p style="color: var(--color-gray-500); margin-bottom: 0;"><?php echo __('admin_total_revenue'); ?></p>
-                </div>
-                <div style="background: var(--color-cream); padding: var(--space-5); border-radius: var(--radius-lg); text-align: center;">
-                    <p style="font-size: var(--text-3xl); font-weight: 700; color: #f59e0b; margin-bottom: var(--space-2);"><?php echo formatMoney($openRevenue); ?></p>
-                    <p style="color: var(--color-gray-500); margin-bottom: 0;"><?php echo __('admin_open_revenue'); ?></p>
-                </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); margin-bottom: var(--space-8);">
+                <button type="button" class="admin-dashboard-stat admin-dashboard-stat-filter active" data-filter="all">
+                    <div class="admin-dashboard-stat-icon blue">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                    </div>
+                    <div class="admin-dashboard-stat-content">
+                        <div class="admin-dashboard-stat-label"><?php echo $lang === 'de' ? 'Gesamtumsatz' : 'Total Revenue'; ?></div>
+                        <div class="admin-dashboard-stat-value"><?php echo formatMoney($totalRevenue); ?></div>
+                        <div class="admin-dashboard-stat-sublabel"><?php echo $lang === 'de' ? 'Alle Rechnungen' : 'All invoices'; ?></div>
+                    </div>
+                </button>
+                <button type="button" class="admin-dashboard-stat admin-dashboard-stat-filter" data-filter="open">
+                    <div class="admin-dashboard-stat-icon amber">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    </div>
+                    <div class="admin-dashboard-stat-content">
+                        <div class="admin-dashboard-stat-label"><?php echo $lang === 'de' ? 'Offener Umsatz' : 'Open Revenue'; ?></div>
+                        <div class="admin-dashboard-stat-value"><?php echo formatMoney($openRevenue); ?></div>
+                        <div class="admin-dashboard-stat-sublabel"><?php echo $lang === 'de' ? 'Noch nicht bezahlt' : 'Not yet paid'; ?></div>
+                    </div>
+                </button>
+                <button type="button" class="admin-dashboard-stat admin-dashboard-stat-filter" data-filter="paid">
+                    <div class="admin-dashboard-stat-icon green">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    </div>
+                    <div class="admin-dashboard-stat-content">
+                        <div class="admin-dashboard-stat-label"><?php echo $lang === 'de' ? 'Bezahlte Rechnungen' : 'Paid Invoices'; ?></div>
+                        <div class="admin-dashboard-stat-value"><?php echo formatMoney($paidRevenue); ?></div>
+                        <div class="admin-dashboard-stat-sublabel"><?php echo $lang === 'de' ? 'Bereits bezahlt' : 'Already paid'; ?></div>
+                    </div>
+                </button>
             </div>
 
             <div class="admin-card">
@@ -108,7 +149,7 @@ include PARTIALS_PATH . 'admin-header.php';
                             </thead>
                             <tbody>
                                 <?php foreach ($invoices as $invoice): ?>
-                                <tr>
+                                <tr data-status="<?php echo e($invoice['status']); ?>">
                                     <td><strong><?php echo e($invoice['invoice_number']); ?></strong></td>
                                     <td><?php echo e($invoice['offer_number'] ?? '-'); ?></td>
                                     <td>
@@ -128,6 +169,14 @@ include PARTIALS_PATH . 'admin-header.php';
                                         <div class="admin-actions">
                                             <?php if (!empty($invoice['pdf_path']) && file_exists($invoice['pdf_path'])): ?>
                                             <a href="<?php echo e(PDF_UPLOAD_URL . 'invoices/' . basename($invoice['pdf_path'])); ?>" target="_blank" class="admin-btn admin-btn-edit"><?php echo __('admin_view_pdf'); ?></a>
+                                            <?php endif; ?>
+                                            <?php if ($invoice['status'] !== 'paid'): ?>
+                                            <form method="POST" action="" style="display: inline;">
+                                                <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
+                                                <input type="hidden" name="invoice_id" value="<?php echo e($invoice['id']); ?>">
+                                                <input type="hidden" name="action" value="send_invoice">
+                                                <button type="submit" class="admin-btn admin-btn-send" style="border: none; cursor: pointer;" onclick="return confirm('<?php echo e(__('admin_send_invoice_confirm')); ?>')"><?php echo __('admin_send_invoice'); ?></button>
+                                            </form>
                                             <?php endif; ?>
                                             <?php if ($invoice['status'] !== 'paid'): ?>
                                             <form method="POST" action="" style="display: inline;">
@@ -155,5 +204,47 @@ include PARTIALS_PATH . 'admin-header.php';
             </main>
         </div>
     </div>
+
+<script>
+(function() {
+    var table = document.querySelector('.admin-table');
+    var statFilters = document.querySelectorAll('.admin-dashboard-stat-filter');
+    if (!table) return;
+
+    var rows = table.querySelectorAll('tbody tr');
+    var noResults = document.createElement('div');
+    noResults.className = 'admin-empty-state';
+    noResults.style.display = 'none';
+    noResults.style.padding = 'var(--space-12) var(--space-6)';
+    noResults.style.textAlign = 'center';
+    noResults.innerHTML = '<p style="color: var(--color-gray-500); margin-bottom: 0;"><?php echo $lang === "de" ? "Keine Rechnungen für diesen Filter vorhanden." : "No invoices found for this filter."; ?></p>';
+    table.parentNode.insertBefore(noResults, table.nextSibling);
+
+    var activeFilter = 'all';
+
+    function applyFilter() {
+        var visibleCount = 0;
+        rows.forEach(function(row) {
+            var status = row.getAttribute('data-status');
+            var show = activeFilter === 'all' ||
+                (activeFilter === 'open' && status !== 'paid') ||
+                (activeFilter === 'paid' && status === 'paid');
+            row.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
+        });
+        noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+    }
+
+    statFilters.forEach(function(button) {
+        button.addEventListener('click', function() {
+            activeFilter = this.getAttribute('data-filter');
+            statFilters.forEach(function(btn) {
+                btn.classList.toggle('active', btn === this);
+            }, this);
+            applyFilter();
+        });
+    });
+})();
+</script>
 
 <?php include PARTIALS_PATH . 'admin-footer.php'; ?>

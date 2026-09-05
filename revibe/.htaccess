@@ -65,6 +65,13 @@ RedirectMatch 403 ^/data/.*$
     Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
 </IfModule>
 
+# Google Maps API-Key als Umgebungsvariable (sicherer als Datenbank-Speicherung)
+# Schlüssel in Google Cloud Console auf Distance Matrix API + HTTP-Referrer einschränken,
+# dann hier die eigene Domain eintragen (z. B. https://deinedomain.at/*).
+<IfModule mod_env.c>
+    SetEnv GOOGLE_MAPS_API_KEY "AIzaSyADJ6RIaT_JTgNA0_axR67LGGbxrJIeWOE"
+</IfModule>
+
 # Fehlerseiten
 ErrorDocument 404 /404.php
 ErrorDocument 403 /403.php

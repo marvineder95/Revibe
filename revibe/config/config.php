@@ -37,9 +37,23 @@ if (session_status() === PHP_SESSION_NONE) {
 // BASIS-KONFIGURATION
 // ============================================
 
-// Protokoll automatisch erkennen (http/https)
-$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+// Protokoll automatisch erkennen (http/https), auch hinter Reverse-Proxies
+$protocol = 'http';
+if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+    $protocol = 'https';
+} elseif (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    $protocol = 'https';
+}
+
+// Host ermitteln, auch hinter Reverse-Proxies
+$host = 'localhost';
+if (!empty($_SERVER['HTTP_X_FORWARDED_HOST'])) {
+    $host = $_SERVER['HTTP_X_FORWARDED_HOST'];
+} elseif (!empty($_SERVER['HTTP_HOST'])) {
+    $host = $_SERVER['HTTP_HOST'];
+} elseif (!empty($_SERVER['SERVER_NAME'])) {
+    $host = $_SERVER['SERVER_NAME'];
+}
 
 // Basis-URL der Webseite (automatisch aus Protokoll + Host, mit abschließendem Slash)
 define('BASE_URL', $protocol . '://' . $host . '/');
@@ -116,9 +130,9 @@ define('MAIL_SUBJECT_PREFIX', '[Jukebox-Anfrage] ');
 // ============================================
 
 define('COMPANY_NAME', 'Revibe');
-define('COMPANY_STREET', 'Musterstraße 123');
-define('COMPANY_ZIP', '1010');
-define('COMPANY_CITY', 'Wien');
+define('COMPANY_STREET', 'Obersdorferstraße 5');
+define('COMPANY_ZIP', '2201');
+define('COMPANY_CITY', 'Seyring');
 define('COMPANY_COUNTRY', 'Österreich');
 
 // Fixe Liefergebiete
@@ -165,3 +179,4 @@ require_once INCLUDES_PATH . 'inquiries-model.php';
 require_once INCLUDES_PATH . 'offers-model.php';
 require_once INCLUDES_PATH . 'invoices-model.php';
 require_once INCLUDES_PATH . 'rentals-model.php';
+require_once INCLUDES_PATH . 'reviews-model.php';

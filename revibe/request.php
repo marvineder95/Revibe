@@ -1,29 +1,17 @@
 <?php
 /**
  * Anfragekorb / Warenkorb
+ * @deprecated Wird zur Kontaktseite weitergeleitet.
  */
 require_once 'config/config.php';
 
-setSecurityHeaders();
-
-$page = 'contact';
-$metaData = ['url' => BASE_URL . 'request.php'];
-
-$cartItems = getCartItems();
-$cart = getCart();
-
-// Coupon per URL vorausfüllen
+// Coupon-Parameter aus URL übernehmen, falls vorhanden
 if (isset($_GET['coupon'])) {
     cartSetCoupon($_GET['coupon']);
-    $cart = getCart();
 }
 
-$lang = getCurrentLanguage();
-
-// Verfügbarkeit des Warenkorbs prüfen
-$cartAvailability = checkCartAvailability($cart);
-
-include PARTIALS_PATH . 'header.php';
+header('Location: ' . BASE_URL . 'contact.php', true, 301);
+exit;
 ?>
 
 <section class="section">

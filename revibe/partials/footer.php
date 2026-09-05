@@ -11,19 +11,47 @@
                 <!-- Brand -->
                 <div class="footer-brand">
                     <a href="<?php echo BASE_URL; ?>" class="logo footer-logo">
-                        <img src="<?php echo ASSETS_URL; ?>images/RevibeLogo.svg" alt="<?php echo e(COMPANY_NAME); ?> Logo" class="logo-img">
+                        <img src="<?php echo ASSETS_URL; ?>images/RevibeLogoPdf.png" alt="<?php echo e(COMPANY_NAME); ?> Logo" class="logo-img">
                     </a>
                     <p><?php echo __('footer_tagline'); ?></p>
+                    
+                    <ul class="footer-features">
+                        <li>
+                            <span class="footer-feature-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                            </span>
+                            <?php echo __('footer_feature_1'); ?>
+                        </li>
+                        <li>
+                            <span class="footer-feature-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                            </span>
+                            <?php echo __('footer_feature_2'); ?>
+                        </li>
+                        <li>
+                            <span class="footer-feature-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                            </span>
+                            <?php echo __('footer_feature_3'); ?>
+                        </li>
+                        <li>
+                            <span class="footer-feature-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            </span>
+                            <?php echo __('footer_feature_4'); ?>
+                        </li>
+                    </ul>
                 </div>
                 
                 <!-- Navigation -->
                 <div>
-                    <h4 class="footer-title">Navigation</h4>
+                    <h4 class="footer-title"><?php echo __('footer_navigation_title'); ?></h4>
                     <ul class="footer-links">
                         <li><a href="<?php echo BASE_URL; ?>"><?php echo __('nav_home'); ?></a></li>
-                        <li><a href="<?php echo BASE_URL; ?>about.php"><?php echo __('nav_about'); ?></a></li>
                         <li><a href="<?php echo BASE_URL; ?>catalog.php"><?php echo __('nav_catalog'); ?></a></li>
                         <li><a href="<?php echo BASE_URL; ?>process.php"><?php echo __('nav_process'); ?></a></li>
+                        <li><a href="<?php echo BASE_URL; ?>about.php"><?php echo __('nav_about'); ?></a></li>
+                        <li><a href="<?php echo BASE_URL; ?>reviews.php"><?php echo __('nav_reviews'); ?></a></li>
                         <li><a href="<?php echo BASE_URL; ?>faq.php"><?php echo __('nav_faq'); ?></a></li>
                         <li><a href="<?php echo BASE_URL; ?>contact.php"><?php echo __('nav_contact'); ?></a></li>
                     </ul>
@@ -32,16 +60,31 @@
                 <!-- Contact -->
                 <div class="footer-contact">
                     <h4 class="footer-title"><?php echo __('footer_contact_title'); ?></h4>
-                    <p><?php echo COMPANY_NAME; ?></p>
-                    <p><?php echo COMPANY_STREET; ?></p>
-                    <p><?php echo COMPANY_ZIP; ?> <?php echo COMPANY_CITY; ?></p>
-                    <p><?php echo COMPANY_COUNTRY; ?></p>
-                    <p style="margin-top: var(--space-3);">
-                        <a href="tel:<?php echo preg_replace('/[^0-9+]/', '', COMPANY_PHONE); ?>"><?php echo COMPANY_PHONE; ?></a>
-                    </p>
-                    <p>
-                        <a href="mailto:<?php echo COMPANY_EMAIL; ?>"><?php echo COMPANY_EMAIL; ?></a>
-                    </p>
+                    <ul class="footer-contact-list">
+                        <li>
+                            <span class="footer-contact-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                            </span>
+                            <span>
+                                <?php echo COMPANY_NAME; ?><br>
+                                <?php echo COMPANY_STREET; ?><br>
+                                <?php echo COMPANY_ZIP; ?> <?php echo COMPANY_CITY; ?><br>
+                                <?php echo COMPANY_COUNTRY; ?>
+                            </span>
+                        </li>
+                        <li>
+                            <span class="footer-contact-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.8 12.8 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.8 12.8 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                            </span>
+                            <a href="tel:<?php echo preg_replace('/[^0-9+]/', '', COMPANY_PHONE); ?>"><?php echo COMPANY_PHONE; ?></a>
+                        </li>
+                        <li>
+                            <span class="footer-contact-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                            </span>
+                            <a href="mailto:<?php echo COMPANY_EMAIL; ?>"><?php echo COMPANY_EMAIL; ?></a>
+                        </li>
+                    </ul>
                 </div>
                 
                 <!-- Social Media -->
@@ -58,16 +101,12 @@
                             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
                         </a>
                     </div>
-                    <p style="font-size: var(--text-xs); color: var(--color-gray-500); margin-top: var(--space-2);">Folgen Sie uns für Updates</p>
-                </div>
-                
-                <!-- Legal -->
-                <div>
-                    <h4 class="footer-title"><?php echo __('footer_legal_title'); ?></h4>
-                    <ul class="footer-links">
-                        <li><a href="<?php echo BASE_URL; ?>impressum.php"><?php echo __('footer_imprint'); ?></a></li>
-                        <li><a href="<?php echo BASE_URL; ?>datenschutz.php"><?php echo __('footer_privacy'); ?></a></li>
-                    </ul>
+                    <p class="footer-social-text"><?php echo __('footer_social_text'); ?></p>
+                    
+                    <a href="https://www.point4studios.at" target="_blank" rel="noopener" class="footer-credit" title="point4studios">
+                        <p class="footer-credit-text"><?php echo __('footer_credit_text'); ?></p>
+                        <img src="<?php echo ASSETS_URL; ?>images/point4-lockup-light.png" alt="point4studios" class="footer-credit-logo">
+                    </a>
                 </div>
             </div>
             
@@ -76,6 +115,7 @@
                 <p class="footer-copyright">
                     <?php echo __('footer_copyright', ['year' => date('Y')]); ?>
                 </p>
+                
                 <div class="footer-legal">
                     <a href="<?php echo BASE_URL; ?>impressum.php"><?php echo __('footer_imprint'); ?></a>
                     <a href="<?php echo BASE_URL; ?>datenschutz.php"><?php echo __('footer_privacy'); ?></a>

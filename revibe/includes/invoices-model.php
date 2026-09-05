@@ -5,6 +5,7 @@
 
 require_once __DIR__ . '/database.php';
 require_once __DIR__ . '/offers-model.php';
+require_once __DIR__ . '/pdf.php';
 
 initDatabase();
 
@@ -238,4 +239,76 @@ function generateNextInvoiceNumber() {
  */
 function generateInvoiceId() {
     return 'invoice_' . bin2hex(random_bytes(8));
+}
+
+/**
+ * Rechnung anhand Angebots-ID laden
+ */
+function getInvoiceByOfferId($offerId) {
+    $db = getDbConnection();
+    if (!$db) return null;
+
+    try {
+        $stmt = $db->prepare('SELECT * FROM invoices WHERE offer_id = :offer_id LIMIT 1');
+        $stmt->execute([':offer_id' => $offerId]);
+        return $stmt->fetch() ?: null;
+    } catch (PDOException $e) {
+        error_log('Fehler beim Laden der Rechnung per Angebots-ID: ' . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Erstellt aus einem angenommenen Angebot eine Rechnung inkl. PDF.
+ *
+ * @param string $offerId ID des Angebots
+ * @return array|false Erstellte Rechnung oder false bei Fehler
+ */
+function createInvoiceFromOffer($offerId) {
+    $offer = getOfferById($offerId);
+    if (!$offer) {
+        error_log('createInvoiceFromOffer: Angebot nicht gefunden: ' . $offerId);
+        return false;
+    }
+
+    if ($offer['status'] !== 'accepted') {
+        error_log('createInvoiceFromOffer: Angebot nicht angenommen: ' . $offerId);
+        return false;
+    }
+
+    $existingInvoice = getInvoiceByOfferId($offerId);
+    if ($existingInvoice) {
+        error_log('createInvoiceFromOffer: Rechnung bereits vorhanden für Angebot: ' . $offerId);
+        return ['existing' => true, 'invoice' => $existingInvoice];
+    }
+
+    $inquiry = getInquiryById($offer['inquiry_id']);
+    if (!$inquiry) {
+        error_log('createInvoiceFromOffer: Anfrage nicht gefunden: ' . $offer['inquiry_id']);
+        return false;
+    }
+
+    $pricing = $inquiry['pricing_json'] ?? [];
+    $amountGross = $pricing['total_with_fee'] ?? $pricing['total_gross'] ?? 0;
+
+    $invoiceNumber = generateNextInvoiceNumber();
+    $invoicePdf = generateInvoicePdf($inquiry, $invoiceNumber, $offer['offer_number']);
+    if (!$invoicePdf) {
+        error_log('createInvoiceFromOffer: Rechnungs-PDF konnte nicht erstellt werden für Angebot: ' . $offerId);
+        return false;
+    }
+
+    $invoice = createInvoice($offerId, $invoicePdf['path'], $amountGross);
+    if (!$invoice) {
+        if (!empty($invoicePdf['path']) && file_exists($invoicePdf['path'])) {
+            @unlink($invoicePdf['path']);
+        }
+        error_log('createInvoiceFromOffer: Rechnung konnte nicht gespeichert werden für Angebot: ' . $offerId);
+        return false;
+    }
+
+    // Angebotsnummer in Details ergänzen
+    updateInvoicePdfPath($invoice['id'], $invoicePdf['path']);
+
+    return ['existing' => false, 'invoice' => $invoice];
 }

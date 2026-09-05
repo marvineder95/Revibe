@@ -63,6 +63,9 @@ function initDatabase() {
                 size TEXT,
                 color TEXT,
                 new_arrival INTEGER DEFAULT 0,
+                equipment TEXT,
+                equipment_en TEXT,
+                weight REAL DEFAULT 0,
                 main_image TEXT,
                 gallery_images TEXT, -- JSON Array
                 created_at TEXT,
@@ -75,7 +78,17 @@ function initDatabase() {
         $db->exec('CREATE INDEX IF NOT EXISTS idx_order ON jukeboxes("order")');
         
         // Zusätzliche Spalten nachträglich hinzufügen (für Bestandsdatenbanken)
-        $columnsToAdd = ['category_id' => 'TEXT', 'size' => 'TEXT', 'color' => 'TEXT', 'new_arrival' => 'INTEGER DEFAULT 0'];
+        $columnsToAdd = [
+            'category_id' => 'TEXT',
+            'size' => 'TEXT',
+            'color' => 'TEXT',
+            'new_arrival' => 'INTEGER DEFAULT 0',
+            'tags' => 'TEXT',
+            'equipment' => 'TEXT',
+            'equipment_en' => 'TEXT',
+            'weight' => 'REAL DEFAULT 0',
+            'warehouse_address' => "TEXT DEFAULT 'Oberstdorfer Straße 5, 2201 Seyring, Österreich'"
+        ];
         foreach ($columnsToAdd as $column => $type) {
             try {
                 $db->exec("ALTER TABLE jukeboxes ADD COLUMN {$column} {$type}");
@@ -195,6 +208,12 @@ function initDatabase() {
         $db->exec('CREATE INDEX IF NOT EXISTS idx_offers_status ON offers(status)');
         $db->exec('CREATE INDEX IF NOT EXISTS idx_offers_inquiry ON offers(inquiry_id)');
 
+        // Migration: Unterschriftsspalte für Angebote (sofern noch nicht vorhanden)
+        $columns = $db->query("PRAGMA table_info(offers)")->fetchAll(PDO::FETCH_COLUMN, 1);
+        if (!in_array('signature', $columns, true)) {
+            $db->exec('ALTER TABLE offers ADD COLUMN signature TEXT');
+        }
+
         // Rechnungen Tabelle
         $db->exec('
             CREATE TABLE IF NOT EXISTS invoices (
@@ -238,6 +257,22 @@ function initDatabase() {
         $db->exec('CREATE INDEX IF NOT EXISTS idx_rentals_status ON rentals(status)');
         $db->exec('CREATE INDEX IF NOT EXISTS idx_rentals_inquiry ON rentals(inquiry_id)');
         $db->exec('CREATE INDEX IF NOT EXISTS idx_rentals_offer ON rentals(offer_id)');
+
+        // Bewertungen / Rezensionen Tabelle
+        $db->exec('
+            CREATE TABLE IF NOT EXISTS reviews (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+                title TEXT,
+                text TEXT NOT NULL,
+                status TEXT DEFAULT "pending",
+                created_at TEXT,
+                updated_at TEXT
+            )
+        ');
+        $db->exec('CREATE INDEX IF NOT EXISTS idx_reviews_status ON reviews(status)');
+        $db->exec('CREATE INDEX IF NOT EXISTS idx_reviews_created ON reviews(created_at)');
 
         return true;
     } catch (PDOException $e) {
@@ -294,13 +329,13 @@ function migrateFromJson() {
                 short_description, short_description_en, description, description_en,
                 music_format, music_format_en, condition, condition_en, function_status,
                 power_connection, power_connection_en, dimensions, dimensions_en,
-                price_day, featured, "order", category_id, size, color, new_arrival, main_image, gallery_images, created_at, updated_at
+                price_day, featured, "order", category_id, size, color, new_arrival, equipment, equipment_en, weight, main_image, gallery_images, created_at, updated_at
             ) VALUES (
                 :id, :name, :name_en, :manufacturer, :model, :year,
                 :short_description, :short_description_en, :description, :description_en,
                 :music_format, :music_format_en, :condition, :condition_en, :function_status,
                 :power_connection, :power_connection_en, :dimensions, :dimensions_en,
-                :price_day, :featured, :order, :category_id, :size, :color, :new_arrival, :main_image, :gallery_images, :created_at, :updated_at
+                :price_day, :featured, :order, :category_id, :size, :color, :new_arrival, :equipment, :equipment_en, :weight, :main_image, :gallery_images, :created_at, :updated_at
             )
         ');
         
@@ -332,6 +367,9 @@ function migrateFromJson() {
                 ':size' => $jukebox['size'] ?? null,
                 ':color' => $jukebox['color'] ?? null,
                 ':new_arrival' => !empty($jukebox['new_arrival']) ? 1 : 0,
+                ':equipment' => $jukebox['equipment'] ?? '',
+                ':equipment_en' => $jukebox['equipment_en'] ?? '',
+                ':weight' => $jukebox['weight'] ?? 0,
                 ':main_image' => $jukebox['main_image'] ?? '',
                 ':gallery_images' => json_encode($jukebox['gallery_images'] ?? []),
                 ':created_at' => $jukebox['created_at'] ?? date('Y-m-d H:i:s'),

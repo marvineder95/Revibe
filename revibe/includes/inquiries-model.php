@@ -18,6 +18,14 @@ function createInquiry($data) {
     $token = bin2hex(random_bytes(32));
     $now = date('Y-m-d H:i:s');
 
+    $dateStart = normalizeDateToYmd($data['date_start'] ?? '');
+    $dateEnd = normalizeDateToYmd($data['date_end'] ?? '');
+
+    if ($dateStart === null || $dateEnd === null) {
+        error_log('createInquiry: Ungültiges Datum. Start: "' . ($data['date_start'] ?? '') . '", Ende: "' . ($data['date_end'] ?? '') . '"');
+        return false;
+    }
+
     try {
         $stmt = $db->prepare('
             INSERT INTO inquiries (
@@ -43,8 +51,8 @@ function createInquiry($data) {
             ':email' => $data['email'] ?? '',
             ':phone' => $data['phone'] ?? '',
             ':message' => $data['message'] ?? '',
-            ':date_start' => $data['date_start'] ?? '',
-            ':date_end' => $data['date_end'] ?? '',
+            ':date_start' => $dateStart,
+            ':date_end' => $dateEnd,
             ':duration_days' => max(1, (int)($data['duration_days'] ?? 1)),
             ':event_address' => $data['event_address'] ?? '',
             ':pricing_json' => !empty($data['pricing_json']) ? (is_string($data['pricing_json']) ? $data['pricing_json'] : json_encode($data['pricing_json'])) : '{}',
@@ -147,6 +155,36 @@ function getAllInquiries($limit = 100, $offset = 0) {
         return $rows;
     } catch (PDOException $e) {
         error_log('Fehler beim Laden aller Anfragen: ' . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Anfragen ohne Angebot laden (für manuelle Angebotserstellung im Admin)
+ */
+function getInquiriesWithoutOffer($limit = 100, $offset = 0) {
+    $db = getDbConnection();
+    if (!$db) return [];
+
+    try {
+        $stmt = $db->prepare('
+            SELECT i.* 
+            FROM inquiries i 
+            LEFT JOIN offers o ON i.id = o.inquiry_id 
+            WHERE o.id IS NULL 
+            ORDER BY i.created_at DESC 
+            LIMIT :limit OFFSET :offset
+        ');
+        $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+        foreach ($rows as &$row) {
+            $row['pricing_json'] = json_decode($row['pricing_json'] ?? '{}', true);
+        }
+        return $rows;
+    } catch (PDOException $e) {
+        error_log('Fehler beim Laden der Anfragen ohne Angebot: ' . $e->getMessage());
         return [];
     }
 }

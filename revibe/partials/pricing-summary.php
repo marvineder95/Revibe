@@ -12,7 +12,7 @@ if (!empty($cart['event_address'])) {
         $transport['costs'] = computeTransportPrice($cart['transport_distance_km'], $cart['transport_duration_min']);
         $transport['error'] = '';
     } else {
-        $transport = calculateTransportCosts($cart['event_address']);
+        $transport = calculateTransportCosts($cart['event_address'], $cartItems);
         if (empty($transport['error'])) {
             cartSetTransportData($transport['distance_km'], $transport['duration_min'], '');
         } else {
@@ -97,7 +97,14 @@ $lang = getCurrentLanguage();
     <div style="display: flex; justify-content: space-between; color: var(--color-gray-400);">
         <span>
             <?php echo __('request_contract_fee', ['percent' => formatMoneyRaw($pricing['contract_fee_percent'])]); ?>
-            <span style="cursor: help;" title="<?php echo e(__('request_contract_fee_hint')); ?>">ⓘ</span>
+            <span class="info-tooltip-wrapper">
+                <button type="button" class="info-tooltip-toggle" aria-label="<?php echo e(__('request_contract_fee')); ?> - Info" data-info-target="info-contract-fee-summary">
+                    ⓘ
+                </button>
+                <span id="info-contract-fee-summary" class="info-tooltip-text" role="tooltip">
+                    <?php echo e(__('request_contract_fee_hint')); ?>
+                </span>
+            </span>
         </span>
         <span><?php echo formatMoney($pricing['contract_fee_amount']); ?></span>
     </div>

@@ -110,22 +110,27 @@ function updateOfferPdfPath($id, $pdfPath) {
 
 /**
  * Angebot annehmen
+ *
+ * @param string $id Angebots-ID
+ * @param string|null $signatureData Base64-kodierte PNG-Unterschrift (optional)
+ * @return bool
  */
-function acceptOffer($id) {
+function acceptOffer($id, $signatureData = null) {
     $db = getDbConnection();
     if (!$db) return false;
 
     try {
         $stmt = $db->prepare('
             UPDATE offers 
-            SET status = :status, accepted_at = :accepted_at, updated_at = :updated_at 
+            SET status = :status, accepted_at = :accepted_at, updated_at = :updated_at, signature = :signature
             WHERE id = :id
         ');
         $result = $stmt->execute([
             ':id' => $id,
             ':status' => 'accepted',
             ':accepted_at' => date('Y-m-d H:i:s'),
-            ':updated_at' => date('Y-m-d H:i:s')
+            ':updated_at' => date('Y-m-d H:i:s'),
+            ':signature' => $signatureData ?: null
         ]);
 
         if ($result) {

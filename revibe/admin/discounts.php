@@ -66,53 +66,6 @@ include PARTIALS_PATH . 'admin-header.php';
             <?php endif; ?>
 
             <div class="admin-card" style="margin-bottom: var(--space-8);">
-                <div class="admin-card-header">
-                    <h2 style="font-size: var(--text-xl); margin-bottom: 0;"><?php echo $edit ? 'Rabattregel bearbeiten' : 'Neue Rabattregel'; ?></h2>
-                </div>
-                <div class="admin-card-body">
-                    <form method="POST" action="">
-                        <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
-                        <?php if ($edit): ?>
-                        <input type="hidden" name="id" value="<?php echo e($edit['id']); ?>">
-                        <?php endif; ?>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label">Rabattart</label>
-                                <select name="type" class="form-select">
-                                    <option value="duration" <?php echo ($edit['type'] ?? '') === 'duration' ? 'selected' : ''; ?>>Mietdauer-Rabatt</option>
-                                    <option value="quantity" <?php echo ($edit['type'] ?? '') === 'quantity' ? 'selected' : ''; ?>>Mengenrabatt</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Ab (Tage / Stück)</label>
-                                <input type="number" name="threshold" class="form-input" min="1" value="<?php echo e($edit['threshold'] ?? 1); ?>" required>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Rabatt (%)</label>
-                                <input type="number" name="discount_percent" class="form-input" min="0" max="100" step="0.01" value="<?php echo e($edit['discount_percent'] ?? 0); ?>" required>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Sortierung</label>
-                                <input type="number" name="sort_order" class="form-input" value="<?php echo e($edit['sort_order'] ?? 0); ?>">
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-checkbox">
-                                <input type="checkbox" name="active" <?php echo (!isset($edit) || !empty($edit['active'])) ? 'checked' : ''; ?>>
-                                <span>Aktiv</span>
-                            </label>
-                        </div>
-                        <div style="display: flex; gap: var(--space-4); margin-top: var(--space-4);">
-                            <button type="submit" class="btn btn-primary">Speichern</button>
-                            <?php if ($edit): ?>
-                            <a href="/admin/discounts.php" class="btn btn-dark">Abbrechen</a>
-                            <?php endif; ?>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            <div class="admin-card">
                 <div class="admin-card-header"><h2 style="font-size: var(--text-xl); margin-bottom: 0;">Rabattregeln</h2></div>
                 <div class="admin-card-body">
                     <table class="admin-table">
@@ -136,5 +89,70 @@ include PARTIALS_PATH . 'admin-header.php';
                     </table>
                 </div>
             </div>
+
+            <button type="button" id="toggle-discount-form" class="btn btn-primary" style="margin-bottom: var(--space-8);"><?php echo $edit ? 'Formular schließen' : 'Neue Rabattregel erstellen'; ?></button>
+
+            <div id="discount-form-wrapper" style="display: <?php echo $edit ? 'block' : 'none'; ?>;">
+                <div class="admin-card">
+                    <div class="admin-card-header">
+                        <h2 style="font-size: var(--text-xl); margin-bottom: 0;"><?php echo $edit ? 'Rabattregel bearbeiten' : 'Neue Rabattregel'; ?></h2>
+                    </div>
+                    <div class="admin-card-body">
+                        <form method="POST" action="">
+                            <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
+                            <?php if ($edit): ?>
+                            <input type="hidden" name="id" value="<?php echo e($edit['id']); ?>">
+                            <?php endif; ?>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Rabattart</label>
+                                    <select name="type" class="form-select">
+                                        <option value="duration" <?php echo ($edit['type'] ?? '') === 'duration' ? 'selected' : ''; ?>>Mietdauer-Rabatt</option>
+                                        <option value="quantity" <?php echo ($edit['type'] ?? '') === 'quantity' ? 'selected' : ''; ?>>Mengenrabatt</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Ab (Tage / Stück)</label>
+                                    <input type="number" name="threshold" class="form-input" min="1" value="<?php echo e($edit['threshold'] ?? 1); ?>" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Rabatt (%)</label>
+                                    <input type="number" name="discount_percent" class="form-input" min="0" max="100" step="0.01" value="<?php echo e($edit['discount_percent'] ?? 0); ?>" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Sortierung</label>
+                                    <input type="number" name="sort_order" class="form-input" value="<?php echo e($edit['sort_order'] ?? 0); ?>">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-checkbox">
+                                    <input type="checkbox" name="active" <?php echo (!isset($edit) || !empty($edit['active'])) ? 'checked' : ''; ?>>
+                                    <span>Aktiv</span>
+                                </label>
+                            </div>
+                            <div style="display: flex; gap: var(--space-4); margin-top: var(--space-4);">
+                                <button type="submit" class="btn btn-primary">Speichern</button>
+                                <?php if ($edit): ?>
+                                <a href="/admin/discounts.php" class="btn btn-dark">Abbrechen</a>
+                                <?php endif; ?>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+<script>
+(function() {
+    var toggle = document.getElementById('toggle-discount-form');
+    var wrapper = document.getElementById('discount-form-wrapper');
+    if (toggle && wrapper) {
+        toggle.addEventListener('click', function() {
+            var isHidden = wrapper.style.display === 'none';
+            wrapper.style.display = isHidden ? 'block' : 'none';
+            toggle.textContent = isHidden ? 'Formular schließen' : 'Neue Rabattregel erstellen';
+        });
+    }
+})();
+</script>
 
 <?php include PARTIALS_PATH . 'admin-footer.php'; ?>

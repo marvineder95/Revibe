@@ -63,6 +63,7 @@
                     <a href="<?php echo BASE_URL; ?>process.php" class="nav-link <?php echo isActivePage('process'); ?>"><?php echo __('nav_process'); ?></a>
                     <a href="<?php echo BASE_URL; ?>contact.php" class="nav-link <?php echo isActivePage('contact'); ?>"><?php echo __('nav_contact'); ?></a>
                     <a href="<?php echo BASE_URL; ?>about.php" class="nav-link <?php echo isActivePage('about'); ?>"><?php echo __('nav_about'); ?></a>
+                    <a href="<?php echo BASE_URL; ?>reviews.php" class="nav-link <?php echo isActivePage('reviews'); ?>"><?php echo __('nav_reviews'); ?></a>
                     <a href="<?php echo BASE_URL; ?>faq.php" class="nav-link <?php echo isActivePage('faq'); ?>"><?php echo __('nav_faq'); ?></a>
                 </nav>
                 
@@ -100,6 +101,7 @@
         <a href="<?php echo BASE_URL; ?>process.php" class="nav-link"><?php echo __('nav_process'); ?></a>
         <a href="<?php echo BASE_URL; ?>contact.php" class="nav-link"><?php echo __('nav_contact'); ?></a>
         <a href="<?php echo BASE_URL; ?>about.php" class="nav-link"><?php echo __('nav_about'); ?></a>
+        <a href="<?php echo BASE_URL; ?>reviews.php" class="nav-link"><?php echo __('nav_reviews'); ?></a>
         <a href="<?php echo BASE_URL; ?>faq.php" class="nav-link"><?php echo __('nav_faq'); ?></a>
     </nav>
     

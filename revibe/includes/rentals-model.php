@@ -18,8 +18,19 @@ function createRental($data) {
     $now = date('Y-m-d H:i:s');
 
     // Daten ins Format Y-m-d normalisieren (Eingabe kann d.m.Y oder Y-m-d sein)
-    $dateStart = date('Y-m-d', strtotime($data['date_start']));
-    $dateEnd = date('Y-m-d', strtotime($data['date_end']));
+    $dateStart = normalizeDateToYmd($data['date_start'] ?? '');
+    $dateEnd = normalizeDateToYmd($data['date_end'] ?? '');
+
+    if ($dateStart === null || $dateEnd === null) {
+        error_log('createRental: Ungültiges Datum. Start: "' . ($data['date_start'] ?? '') . '", Ende: "' . ($data['date_end'] ?? '') . '"');
+        return false;
+    }
+
+    if ($dateEnd < $dateStart) {
+        $tmp = $dateStart;
+        $dateStart = $dateEnd;
+        $dateEnd = $tmp;
+    }
 
     try {
         $stmt = $db->prepare('
@@ -245,8 +256,19 @@ function isJukeboxAvailable($jukeboxId, $dateStart, $dateEnd, $excludeInquiryId 
     $db = getDbConnection();
     if (!$db) return false;
 
-    $start = date('Y-m-d', strtotime($dateStart));
-    $end = date('Y-m-d', strtotime($dateEnd));
+    $start = normalizeDateToYmd($dateStart);
+    $end = normalizeDateToYmd($dateEnd);
+
+    if ($start === null || $end === null) {
+        error_log('Verfuegbarkeitspruefung: Ungueltiges Datum. Start: "' . $dateStart . '", Ende: "' . $dateEnd . '"');
+        return false;
+    }
+
+    if ($end < $start) {
+        $tmp = $start;
+        $start = $end;
+        $end = $tmp;
+    }
 
     try {
         $sql = '
@@ -286,8 +308,19 @@ function getConflictingRentals($jukeboxId, $dateStart, $dateEnd, $excludeInquiry
     $db = getDbConnection();
     if (!$db) return [];
 
-    $start = date('Y-m-d', strtotime($dateStart));
-    $end = date('Y-m-d', strtotime($dateEnd));
+    $start = normalizeDateToYmd($dateStart);
+    $end = normalizeDateToYmd($dateEnd);
+
+    if ($start === null || $end === null) {
+        error_log('Verfuegbarkeitspruefung: Ungueltiges Datum. Start: "' . $dateStart . '", Ende: "' . $dateEnd . '"');
+        return [];
+    }
+
+    if ($end < $start) {
+        $tmp = $start;
+        $start = $end;
+        $end = $tmp;
+    }
 
     try {
         $sql = '
@@ -345,4 +378,48 @@ function checkCartAvailability($cart) {
  */
 function generateRentalId() {
     return 'rent_' . bin2hex(random_bytes(8));
+}
+
+/**
+ * Normalisiert ein Datum zuverlässig ins Format Y-m-d.
+ * Unterstützt d.m.Y, Y-m-d, Y/m/d, d/m/Y sowie ISO-8601.
+ * Gibt null zurück, wenn das Datum ungültig ist.
+ */
+function normalizeDateToYmd($dateStr) {
+    $dateStr = trim((string)$dateStr);
+    if (empty($dateStr)) {
+        return null;
+    }
+
+    // Bereits Y-m-d
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateStr) && checkdate(
+        (int)substr($dateStr, 5, 2),
+        (int)substr($dateStr, 8, 2),
+        (int)substr($dateStr, 0, 4)
+    )) {
+        return $dateStr;
+    }
+
+    // d.m.Y
+    if (preg_match('/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/', $dateStr, $m)) {
+        if (checkdate((int)$m[2], (int)$m[1], (int)$m[3])) {
+            return sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+        }
+    }
+
+    // d/m/Y oder m/d/Y (Fallback, wobei m/d/Y unsicher ist; wir bevorzugen d/m/Y)
+    if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $dateStr, $m)) {
+        if (checkdate((int)$m[2], (int)$m[1], (int)$m[3])) {
+            return sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+        }
+    }
+
+    // Generischer Fallback via DateTime
+    try {
+        $dt = new DateTime($dateStr);
+        return $dt->format('Y-m-d');
+    } catch (Exception $e) {
+        error_log('Datum konnte nicht normalisiert werden: "' . $dateStr . '"');
+        return null;
+    }
 }

@@ -50,6 +50,14 @@ foreach ($rentals as $rental) {
     $rentalsByJukebox[$rental['jukebox_id']][] = $rental;
 }
 
+// Kunden-Informationen für die anzuzeigenden Rentals vorab laden
+$inquiryCache = [];
+foreach ($rentals as $rental) {
+    if (!empty($rental['inquiry_id']) && !isset($inquiryCache[$rental['inquiry_id']])) {
+        $inquiryCache[$rental['inquiry_id']] = getInquiryById($rental['inquiry_id']);
+    }
+}
+
 // Status-Filter
 $statusFilter = $_GET['status'] ?? '';
 $statuses = [
@@ -162,9 +170,9 @@ function formatMonthYear($timestamp, $lang) {
                                 }
                             }
                             $statusClass = '';
-                            $title = [];
+                            $tooltipLines = [];
+                            $primaryRental = null;
                             foreach ($cellRentals as $r) {
-                                $title[] = ($statuses[$r['status']] ?? $r['status']) . ': ' . date('d.m.Y', strtotime($r['date_start'])) . ' - ' . date('d.m.Y', strtotime($r['date_end']));
                                 if ($r['status'] === 'confirmed') {
                                     $statusClass = 'confirmed';
                                 } elseif ($r['status'] === 'reserved' && $statusClass !== 'confirmed') {
@@ -172,11 +180,19 @@ function formatMonthYear($timestamp, $lang) {
                                 } elseif ($r['status'] === 'cancelled') {
                                     $statusClass = 'cancelled';
                                 }
+                                $inq = $inquiryCache[$r['inquiry_id']] ?? null;
+                                $customer = $inq ? trim(($inq['firstname'] ?? '') . ' ' . ($inq['lastname'] ?? '')) : '';
+                                $tooltipLines[] = ($statuses[$r['status']] ?? $r['status']) . ($customer ? ' – ' . $customer : '') . ': ' . date('d.m.Y', strtotime($r['date_start'])) . ' - ' . date('d.m.Y', strtotime($r['date_end']));
+                                if ($primaryRental === null || (!empty($r['offer_id']) && empty($primaryRental['offer_id']))) {
+                                    $primaryRental = $r;
+                                }
                             }
                             $isToday = $d === (int)date('j') && $year === (int)date('Y') && $month === (int)date('n');
+                            $hasOffer = !empty($primaryRental['offer_id']);
+                            $cellClasses = 'calendar-day-cell ' . ($statusClass ? 'calendar-cell-' . $statusClass . ' ' : '') . ($isToday ? 'calendar-cell-today ' : '') . (!empty($cellRentals) ? 'calendar-cell-booked ' : '');
+                            $cellData = !empty($cellRentals) ? ' data-tooltip="' . e(implode("\n", $tooltipLines)) . '"' . ($hasOffer ? ' data-offer-id="' . e($primaryRental['offer_id']) . '"' : '') . ' role="button" tabindex="0"' : '';
                         ?>
-                        <td class="calendar-day-cell <?php echo $statusClass ? 'calendar-cell-' . $statusClass : ''; ?> <?php echo $isToday ? 'calendar-cell-today' : ''; ?>"
-                            title="<?php echo e(implode("\n", $title)); ?>">
+                        <td class="<?php echo trim($cellClasses); ?>"<?php echo $cellData; ?>>
                             <?php if (!empty($cellRentals)): ?>
                             <span class="calendar-day-marker"></span>
                             <?php endif; ?>
@@ -249,5 +265,28 @@ function formatMonthYear($timestamp, $lang) {
     </div>
 </div>
 <?php endif; ?>
+
+<script>
+(function() {
+    var cells = document.querySelectorAll('.calendar-cell-booked[data-offer-id]');
+    cells.forEach(function(cell) {
+        cell.addEventListener('click', function() {
+            var offerId = this.getAttribute('data-offer-id');
+            if (offerId) {
+                window.location.href = '/admin/offers.php?highlight_offer=' + encodeURIComponent(offerId);
+            }
+        });
+        cell.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                var offerId = this.getAttribute('data-offer-id');
+                if (offerId) {
+                    window.location.href = '/admin/offers.php?highlight_offer=' + encodeURIComponent(offerId);
+                }
+            }
+        });
+    });
+})();
+</script>
 
 <?php include PARTIALS_PATH . 'admin-footer.php'; ?>

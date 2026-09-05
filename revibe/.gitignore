@@ -21,4 +21,5 @@ Thumbs.db
 *.log
 *.tmp
 .cache/.playwright-mcp/
+.playwright-mcp/
 test-results/

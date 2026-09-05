@@ -13,75 +13,90 @@ if (!isAdminLoggedIn()) {
 
 $error = '';
 
+// Formularwerte für die Wiederverwendung bei Fehlern vorbereiten
+$formData = [
+    'name' => $_POST['name'] ?? '',
+    'name_en' => $_POST['name_en'] ?? '',
+    'manufacturer' => $_POST['manufacturer'] ?? '',
+    'model' => $_POST['model'] ?? '',
+    'year' => $_POST['year'] ?? '',
+    'short_description' => $_POST['short_description'] ?? '',
+    'short_description_en' => $_POST['short_description_en'] ?? '',
+    'description' => $_POST['description'] ?? '',
+    'description_en' => $_POST['description_en'] ?? '',
+    'music_format' => $_POST['music_format'] ?? '',
+    'music_format_en' => $_POST['music_format_en'] ?? '',
+    'condition' => $_POST['condition'] ?? '',
+    'condition_en' => $_POST['condition_en'] ?? '',
+    'function_status' => $_POST['function_status'] ?? 'working',
+    'power_connection' => $_POST['power_connection'] ?? '',
+    'power_connection_en' => $_POST['power_connection_en'] ?? '',
+    'dimensions' => $_POST['dimensions'] ?? '',
+    'dimensions_en' => $_POST['dimensions_en'] ?? '',
+    'equipment' => $_POST['equipment'] ?? '',
+    'equipment_en' => $_POST['equipment_en'] ?? '',
+    'weight' => $_POST['weight'] ?? '',
+    'warehouse_address' => $_POST['warehouse_address'] ?? WAREHOUSE_ADDRESS_DEFAULT,
+    'price_day' => $_POST['price_day'] ?? '',
+    'featured' => isset($_POST['featured']),
+    'order' => $_POST['order'] ?? '0',
+    'category_id' => $_POST['category_id'] ?? '',
+    'size' => $_POST['size'] ?? '',
+    'color' => $_POST['color'] ?? '',
+    'new_arrival' => isset($_POST['new_arrival']),
+    'tags' => (isset($_POST['tags']) && is_array($_POST['tags'])) ? $_POST['tags'] : []
+];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // CSRF-Token prüfen
     if (!validateCsrfToken($_POST['csrf_token'] ?? '')) {
         $error = 'Sicherheitsfehler. Bitte laden Sie die Seite neu.';
     } else {
-        // Hauptbild upload
-        $mainImage = '';
-        if (!empty($_FILES['main_image']['tmp_name'])) {
-            $result = uploadImage($_FILES['main_image']);
-            if ($result['success']) {
-                $mainImage = $result['filename'];
-            } else {
-                $error = $result['error'];
-            }
-        }
-        
-        // Galerie-Bilder upload
-        $galleryImages = [];
+        // Bilder upload
+        $orderedImages = [];
         $uploadErrors = [];
-        if (isset($_FILES['gallery_images']) && is_array($_FILES['gallery_images']['tmp_name'])) {
-            $fileCount = count($_FILES['gallery_images']['tmp_name']);
-            
+        $imageOrder = isset($_POST['image_order']) && is_array($_POST['image_order']) ? $_POST['image_order'] : [];
+
+        // Dateien aus dem gemeinsamen Upload in richtiger Reihenfolge verarbeiten
+        if (isset($_FILES['new_images']) && is_array($_FILES['new_images']['tmp_name'])) {
+            $newFiles = [];
+            $fileCount = count($_FILES['new_images']['tmp_name']);
             for ($i = 0; $i < $fileCount; $i++) {
-                $tmpName = $_FILES['gallery_images']['tmp_name'][$i];
-                $fileError = $_FILES['gallery_images']['error'][$i];
-                $fileName = $_FILES['gallery_images']['name'][$i];
-                
-                if ($fileError !== UPLOAD_ERR_OK) {
-                    // Upload-Fehler erfassen
-                    switch ($fileError) {
-                        case UPLOAD_ERR_INI_SIZE:
-                            $actualLimit = ini_get('upload_max_filesize');
-                            $uploadErrors[] = "'$fileName' ist zu groß (PHP-Limit: $actualLimit). Bitte Bild kleiner machen oder Server-Admin kontaktieren.";
-                            break;
-                        case UPLOAD_ERR_FORM_SIZE:
-                            $uploadErrors[] = "'$fileName' ist zu groß (max 10MB)";
-                            break;
-                        case UPLOAD_ERR_PARTIAL:
-                            $uploadErrors[] = "'$fileName' wurde nur teilweise hochgeladen";
-                            break;
-                        case UPLOAD_ERR_NO_FILE:
-                            break; // Keine Fehlermeldung, wenn keine Datei ausgewählt
-                        default:
-                            $uploadErrors[] = "Fehler beim Upload von '$fileName' (Code: $fileError)";
-                    }
+                if ($_FILES['new_images']['error'][$i] !== UPLOAD_ERR_OK) {
                     continue;
                 }
-                
-                if (!empty($tmpName)) {
-                    $file = [
-                        'tmp_name' => $tmpName,
-                        'name' => $fileName,
-                        'type' => $_FILES['gallery_images']['type'][$i],
-                        'size' => $_FILES['gallery_images']['size'][$i]
-                    ];
+                $newFiles[$i] = [
+                    'tmp_name' => $_FILES['new_images']['tmp_name'][$i],
+                    'name' => $_FILES['new_images']['name'][$i],
+                    'type' => $_FILES['new_images']['type'][$i],
+                    'size' => $_FILES['new_images']['size'][$i]
+                ];
+            }
+
+            foreach ($imageOrder as $orderValue) {
+                if (strpos($orderValue, 'new:') === 0) {
+                    $idx = (int) substr($orderValue, 4);
+                    if (!isset($newFiles[$idx])) {
+                        continue;
+                    }
+                    $file = $newFiles[$idx];
                     $result = uploadImage($file);
                     if ($result['success']) {
-                        $galleryImages[] = $result['filename'];
+                        $orderedImages[] = $result['filename'];
                     } else {
-                        $uploadErrors[] = "'$fileName': " . $result['error'];
+                        $uploadErrors[] = "'" . $file['name'] . "': " . $result['error'];
                     }
                 }
             }
         }
-        
+
         // Upload-Fehler anzeigen
         if (!empty($uploadErrors)) {
             $error = 'Upload-Fehler:<br>' . implode('<br>', $uploadErrors);
         }
+
+        $mainImage = $orderedImages[0] ?? '';
+        $galleryImages = array_slice($orderedImages, 1);
         
         if (!$error) {
             // Jukebox-Daten
@@ -104,6 +119,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'power_connection_en' => $_POST['power_connection_en'] ?? '',
                 'dimensions' => $_POST['dimensions'] ?? '',
                 'dimensions_en' => $_POST['dimensions_en'] ?? '',
+                'equipment' => $_POST['equipment'] ?? '',
+                'equipment_en' => $_POST['equipment_en'] ?? '',
+                'weight' => $_POST['weight'] ?? null,
+                'warehouse_address' => $_POST['warehouse_address'] ?? '',
                 'price_day' => $_POST['price_day'] ?? 0,
                 'featured' => isset($_POST['featured']) ? true : false,
                 'order' => $_POST['order'] ?? 0,
@@ -111,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'size' => $_POST['size'] ?? '',
                 'color' => $_POST['color'] ?? '',
                 'new_arrival' => isset($_POST['new_arrival']) ? true : false,
+                'tags' => $_POST['tags'] ?? [],
                 'main_image' => $mainImage,
                 'gallery_images' => $galleryImages
             ];
@@ -151,33 +171,33 @@ include PARTIALS_PATH . 'admin-header.php';
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label class="form-label">Name (DE) *</label>
-                                        <input type="text" name="name" class="form-input" required>
+                                        <input type="text" name="name" class="form-input" value="<?php echo e($formData['name']); ?>" required>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Name (EN)</label>
-                                        <input type="text" name="name_en" class="form-input">
+                                        <input type="text" name="name_en" class="form-input" value="<?php echo e($formData['name_en']); ?>">
                                     </div>
                                 </div>
                                 
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label class="form-label">Hersteller</label>
-                                        <input type="text" name="manufacturer" class="form-input">
+                                        <input type="text" name="manufacturer" class="form-input" value="<?php echo e($formData['manufacturer']); ?>">
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Modell</label>
-                                        <input type="text" name="model" class="form-input">
+                                        <input type="text" name="model" class="form-input" value="<?php echo e($formData['model']); ?>">
                                     </div>
                                 </div>
                                 
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label class="form-label">Baujahr</label>
-                                        <input type="number" name="year" class="form-input" min="1900" max="2099">
+                                        <input type="number" name="year" class="form-input" min="1900" max="2099" value="<?php echo e($formData['year']); ?>">
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Preis pro Tag (€) *</label>
-                                        <input type="number" name="price_day" class="form-input" min="0" step="0.01" required>
+                                        <input type="number" name="price_day" class="form-input" min="0" step="0.01" value="<?php echo e($formData['price_day']); ?>" required>
                                     </div>
                                 </div>
                                 <div class="form-row">
@@ -186,7 +206,7 @@ include PARTIALS_PATH . 'admin-header.php';
                                         <select name="category_id" class="form-select">
                                             <option value="">— Ohne Kategorie —</option>
                                             <?php foreach (getAllCategories(true) as $cat): ?>
-                                            <option value="<?php echo e($cat['id']); ?>"><?php echo e($cat['name']); ?></option>
+                                            <option value="<?php echo e($cat['id']); ?>" <?php echo ($formData['category_id'] ?? '') === $cat['id'] ? 'selected' : ''; ?>><?php echo e($cat['name']); ?></option>
                                             <?php endforeach; ?>
                                         </select>
                                     </div>
@@ -199,16 +219,16 @@ include PARTIALS_PATH . 'admin-header.php';
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label class="form-label">Größe</label>
-                                        <input type="text" name="size" class="form-input" placeholder="z.B. Klein, Mittel, Groß">
+                                        <input type="text" name="size" class="form-input" value="<?php echo e($formData['size']); ?>" placeholder="z.B. Klein, Mittel, Groß">
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Farbe</label>
-                                        <input type="text" name="color" class="form-input" placeholder="z.B. Rot, Schwarz, Holz">
+                                        <input type="text" name="color" class="form-input" value="<?php echo e($formData['color']); ?>" placeholder="z.B. Rot, Schwarz, Holz">
                                     </div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-checkbox">
-                                        <input type="checkbox" name="new_arrival" value="1">
+                                        <input type="checkbox" name="new_arrival" value="1" <?php echo !empty($formData['new_arrival']) ? 'checked' : ''; ?>>
                                         <span>Neu im Sortiment</span>
                                     </label>
                                 </div>
@@ -220,22 +240,22 @@ include PARTIALS_PATH . 'admin-header.php';
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label class="form-label">Kurzbeschreibung (DE)</label>
-                                        <textarea name="short_description" class="form-textarea" rows="2"></textarea>
+                                        <textarea name="short_description" class="form-textarea" rows="2"><?php echo e($formData['short_description']); ?></textarea>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Kurzbeschreibung (EN)</label>
-                                        <textarea name="short_description_en" class="form-textarea" rows="2"></textarea>
+                                        <textarea name="short_description_en" class="form-textarea" rows="2"><?php echo e($formData['short_description_en']); ?></textarea>
                                     </div>
                                 </div>
                                 
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label class="form-label">Ausführliche Beschreibung (DE)</label>
-                                        <textarea name="description" class="form-textarea" rows="4"></textarea>
+                                        <textarea name="description" class="form-textarea" rows="4"><?php echo e($formData['description']); ?></textarea>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Ausführliche Beschreibung (EN)</label>
-                                        <textarea name="description_en" class="form-textarea" rows="4"></textarea>
+                                        <textarea name="description_en" class="form-textarea" rows="4"><?php echo e($formData['description_en']); ?></textarea>
                                     </div>
                                 </div>
                             </div>
@@ -246,22 +266,22 @@ include PARTIALS_PATH . 'admin-header.php';
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label class="form-label">Musikformat (DE)</label>
-                                        <input type="text" name="music_format" class="form-input" placeholder="z.B. CDs, Schallplatten, Bluetooth">
+                                        <input type="text" name="music_format" class="form-input" value="<?php echo e($formData['music_format']); ?>" placeholder="z.B. CDs, Schallplatten, Bluetooth">
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Musikformat (EN)</label>
-                                        <input type="text" name="music_format_en" class="form-input">
+                                        <input type="text" name="music_format_en" class="form-input" value="<?php echo e($formData['music_format_en']); ?>">
                                     </div>
                                 </div>
                                 
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label class="form-label">Zustand (DE)</label>
-                                        <input type="text" name="condition" class="form-input" placeholder="z.B. Sehr gut, restauriert">
+                                        <input type="text" name="condition" class="form-input" value="<?php echo e($formData['condition']); ?>" placeholder="z.B. Sehr gut, restauriert">
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Zustand (EN)</label>
-                                        <input type="text" name="condition_en" class="form-input">
+                                        <input type="text" name="condition_en" class="form-input" value="<?php echo e($formData['condition_en']); ?>">
                                     </div>
                                 </div>
                                 
@@ -269,60 +289,228 @@ include PARTIALS_PATH . 'admin-header.php';
                                     <div class="form-group">
                                         <label class="form-label">Funktionsstatus</label>
                                         <select name="function_status" class="form-select">
-                                            <option value="working">Voll funktionsfähig</option>
-                                            <option value="deco">Deko-Objekt</option>
-                                            <option value="restored">Restauriert</option>
-                                            <option value="original">Originalzustand</option>
+                                            <option value="working" <?php echo ($formData['function_status'] ?? '') === 'working' ? 'selected' : ''; ?>>Voll funktionsfähig</option>
+                                            <option value="deco" <?php echo ($formData['function_status'] ?? '') === 'deco' ? 'selected' : ''; ?>>Deko-Objekt</option>
+                                            <option value="restored" <?php echo ($formData['function_status'] ?? '') === 'restored' ? 'selected' : ''; ?>>Restauriert</option>
+                                            <option value="original" <?php echo ($formData['function_status'] ?? '') === 'original' ? 'selected' : ''; ?>>Originalzustand</option>
                                         </select>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Stromanschluss (DE)</label>
-                                        <input type="text" name="power_connection" class="form-input" placeholder="z.B. 230V Schuko">
+                                        <input type="text" name="power_connection" class="form-input" value="<?php echo e($formData['power_connection']); ?>" placeholder="z.B. 230V Schuko">
                                     </div>
                                 </div>
                                 
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label class="form-label">Stromanschluss (EN)</label>
-                                        <input type="text" name="power_connection_en" class="form-input">
+                                        <input type="text" name="power_connection_en" class="form-input" value="<?php echo e($formData['power_connection_en']); ?>">
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Abmessungen (DE)</label>
-                                        <input type="text" name="dimensions" class="form-input" placeholder="z.B. 150 x 80 x 60 cm">
+                                        <input type="text" name="dimensions" class="form-input" value="<?php echo e($formData['dimensions']); ?>" placeholder="z.B. 150 x 80 x 60 cm">
                                     </div>
                                 </div>
                                 
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label class="form-label">Abmessungen (EN)</label>
-                                        <input type="text" name="dimensions_en" class="form-input">
+                                        <input type="text" name="dimensions_en" class="form-input" value="<?php echo e($formData['dimensions_en']); ?>">
                                     </div>
                                     <div class="form-group">
-                                        <label class="form-label">Sortierung</label>
-                                        <input type="number" name="order" class="form-input" value="0" min="0">
+                                        <label class="form-label">Gewicht (kg)</label>
+                                        <input type="number" name="weight" class="form-input" min="0" step="0.1" value="<?php echo e($formData['weight']); ?>" placeholder="z.B. 85">
                                     </div>
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">Bestückung (DE)</label>
+                                        <input type="text" name="equipment" class="form-input" value="<?php echo e($formData['equipment']); ?>" placeholder="z.B. 100 CDs, 7 Vinyl-Singles, Bluetooth">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Bestückung (EN)</label>
+                                        <input type="text" name="equipment_en" class="form-input" value="<?php echo e($formData['equipment_en']); ?>" placeholder="z.B. 100 CDs, 7 vinyl singles, Bluetooth">
+                                    </div>
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">Lageradresse</label>
+                                        <input type="text" name="warehouse_address" class="form-input" value="<?php echo e($formData['warehouse_address']); ?>" placeholder="z.B. Oberstdorfer Straße 5, 2201 Seyring, Österreich">
+                                    </div>
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">Sortierung</label>
+                                        <input type="number" name="order" class="form-input" value="<?php echo e($formData['order']); ?>" min="0">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Tags -->
+                            <div>
+                                <h3 style="margin-bottom: var(--space-4); color: var(--color-primary);"><?php echo __('admin_tags'); ?></h3>
+                                <div class="admin-tags-selection">
+                                    <?php foreach (JUKEBOX_TAGS as $tagKey => $tagConfig): ?>
+                                    <label class="form-checkbox admin-tag-checkbox admin-tag-checkbox-<?php echo e($tagConfig['color']); ?>">
+                                        <input type="checkbox" name="tags[]" value="<?php echo e($tagKey); ?>" <?php echo in_array($tagKey, $formData['tags'] ?? [], true) ? 'checked' : ''; ?>>
+                                        <span><?php echo e(getJukeboxTagLabel($tagKey)); ?></span>
+                                    </label>
+                                    <?php endforeach; ?>
                                 </div>
                             </div>
                             
                             <!-- Bilder -->
                             <div>
                                 <h3 style="margin-bottom: var(--space-4); color: var(--color-primary);">Bilder</h3>
-                                <div class="form-group">
-                                    <label class="form-label">Hauptbild *</label>
-                                    <input type="file" name="main_image" class="form-input" accept="image/*" required>
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">Galeriebilder</label>
-                                    <input type="file" name="gallery_images[]" class="form-input" accept="image/*" multiple>
+                                <div class="admin-image-manager">
+                                    <div class="admin-image-upload">
+                                        <label class="form-label" style="cursor: pointer; margin-bottom: 0;">
+                                            <span>Bilder auswählen</span>
+                                            <input type="file" name="new_images[]" id="new-images-input" class="form-input" accept="image/*" multiple style="display: none;">
+                                        </label>
+                                        <p style="color: var(--color-text-muted); font-size: var(--text-sm); margin-top: var(--space-2); margin-bottom: 0;">Mehrere Bilder auf einmal hochladen. Das erste Bild wird automatisch zum Hauptbild. Maximal 5 MB pro Bild.</p>
+                                        <div id="image-upload-error" style="display: none; color: #ef4444; font-size: var(--text-sm); margin-top: var(--space-2);"></div>
+                                    </div>
+                                    <div id="admin-image-list" class="admin-image-grid" style="display: none;"></div>
                                 </div>
                             </div>
+
+                            <script>
+                            (function() {
+                                var input = document.getElementById('new-images-input');
+                                var list = document.getElementById('admin-image-list');
+                                var form = input.closest('form');
+                                var uploadError = document.getElementById('image-upload-error');
+                                var fileMap = {};
+                                var nextIndex = 0;
+                                var MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+
+                                function setUploadError(message) {
+                                    if (!uploadError) return;
+                                    uploadError.textContent = message;
+                                    uploadError.style.display = message ? 'block' : 'none';
+                                }
+
+                                function updateMainState() {
+                                    var items = list.querySelectorAll('.admin-image-item');
+                                    items.forEach(function(item, index) {
+                                        item.classList.toggle('is-main', index === 0);
+                                    });
+                                }
+
+                                function updateOrderInputs() {
+                                    list.querySelectorAll('.admin-image-order-input').forEach(function(el) { el.remove(); });
+                                    var items = list.querySelectorAll('.admin-image-item');
+                                    items.forEach(function(item) {
+                                        var idx = item.getAttribute('data-file-index');
+                                        var hidden = document.createElement('input');
+                                        hidden.type = 'hidden';
+                                        hidden.name = 'image_order[]';
+                                        hidden.className = 'admin-image-order-input';
+                                        hidden.value = 'new:' + idx;
+                                        item.appendChild(hidden);
+                                    });
+                                    list.style.display = items.length ? '' : 'none';
+                                }
+
+                                function createItem(file, index) {
+                                    var div = document.createElement('div');
+                                    div.className = 'admin-image-item' + (list.children.length === 0 ? ' is-main' : '');
+                                    div.setAttribute('draggable', 'true');
+                                    div.setAttribute('data-file-index', index);
+                                    var url = URL.createObjectURL(file);
+                                    div.innerHTML = '<img src="' + url + '" alt="">' +
+                                        '<button type="button" class="admin-image-delete" aria-label="Entfernen">&times;</button>';
+                                    div.querySelector('.admin-image-delete').addEventListener('click', function(e) {
+                                        e.stopPropagation();
+                                        div.remove();
+                                        updateMainState();
+                                        updateOrderInputs();
+                                    });
+                                    div.addEventListener('dragstart', function(e) {
+                                        div.classList.add('dragging');
+                                        e.dataTransfer.effectAllowed = 'move';
+                                    });
+                                    div.addEventListener('dragend', function() {
+                                        div.classList.remove('dragging');
+                                        updateOrderInputs();
+                                        updateMainState();
+                                    });
+                                    div.addEventListener('dragover', function(e) {
+                                        e.preventDefault();
+                                        var dragging = list.querySelector('.dragging');
+                                        if (!dragging || dragging === div) return;
+                                        var rect = div.getBoundingClientRect();
+                                        var offsetX = e.clientX - rect.left;
+                                        if (offsetX < rect.width / 2) {
+                                            list.insertBefore(dragging, div);
+                                        } else {
+                                            list.insertBefore(dragging, div.nextSibling);
+                                        }
+                                    });
+                                    return div;
+                                }
+
+                                input.addEventListener('change', function() {
+                                    var files = Array.from(input.files);
+                                    var skipped = [];
+                                    files.forEach(function(file) {
+                                        if (file.size > MAX_SIZE) {
+                                            skipped.push(file.name);
+                                            return;
+                                        }
+                                        var idx = nextIndex++;
+                                        fileMap[idx] = file;
+                                        list.appendChild(createItem(file, idx));
+                                    });
+                                    if (skipped.length) {
+                                        setUploadError('Folgende Dateien überschreiten das Limit von 5 MB und wurden nicht hinzugefügt: ' + skipped.join(', '));
+                                    } else {
+                                        setUploadError('');
+                                    }
+                                    input.value = '';
+                                    updateMainState();
+                                    updateOrderInputs();
+                                });
+
+                                form.addEventListener('submit', function(e) {
+                                    var items = list.querySelectorAll('.admin-image-item[data-file-index]');
+                                    var dt = new DataTransfer();
+                                    var oversized = [];
+                                    items.forEach(function(item, position) {
+                                        var idx = item.getAttribute('data-file-index');
+                                        if (fileMap[idx]) {
+                                            if (fileMap[idx].size > MAX_SIZE) {
+                                                oversized.push(fileMap[idx].name);
+                                                return;
+                                            }
+                                            dt.items.add(fileMap[idx]);
+                                            item.setAttribute('data-file-index', position);
+                                        }
+                                    });
+                                    if (oversized.length) {
+                                        e.preventDefault();
+                                        setUploadError('Folgende Dateien überschreiten das Limit von 5 MB: ' + oversized.join(', '));
+                                        return;
+                                    }
+                                    setUploadError('');
+                                    input.files = dt.files;
+                                    updateOrderInputs();
+                                });
+
+                                list.addEventListener('dragover', function(e) { e.preventDefault(); });
+                            })();
+                            </script>
                             
                             <!-- Einstellungen -->
                             <div>
                                 <h3 style="margin-bottom: var(--space-4); color: var(--color-primary);">Einstellungen</h3>
                                 <div class="form-group">
                                     <label class="form-checkbox">
-                                        <input type="checkbox" name="featured" value="1">
+                                        <input type="checkbox" name="featured" value="1" <?php echo !empty($formData['featured']) ? 'checked' : ''; ?>>
                                         <span>Als Highlight anzeigen</span>
                                     </label>
                                 </div>

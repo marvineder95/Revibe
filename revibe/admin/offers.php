@@ -1,8 +1,10 @@
 <?php
 /**
- * Admin: Angebote verwalten
+ * Admin: Anfragen und Angebote verwalten
  */
 require_once '../config/config.php';
+require_once INCLUDES_PATH . 'pdf.php';
+require_once INCLUDES_PATH . 'invoices-model.php';
 
 setSecurityHeaders();
 
@@ -12,6 +14,36 @@ if (!isAdminLoggedIn()) {
 }
 
 // Aktionen verarbeiten
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action']) && (!empty($_POST['inquiry_id']) || !empty($_POST['offer_id']))) {
+    if (validateCsrfToken($_POST['csrf_token'] ?? '')) {
+        $inquiryId = sanitizeInput($_POST['inquiry_id']);
+        $action = sanitizeInput($_POST['action']);
+
+        if ($action === 'create_offer') {
+            $offer = buildAndSendOffer($inquiryId, 3);
+            if ($offer) {
+                redirect('/admin/offers.php?success=offer_created');
+            } else {
+                redirect('/admin/offers.php?error=offer_create');
+            }
+        }
+
+        if ($action === 'create_invoice') {
+            $offerId = sanitizeInput($_POST['offer_id'] ?? '');
+            $result = createInvoiceFromOffer($offerId);
+            if ($result && empty($result['existing'])) {
+                redirect('/admin/offers.php?success=invoice_created');
+            } elseif ($result && !empty($result['existing'])) {
+                redirect('/admin/offers.php?error=invoice_exists');
+            } else {
+                redirect('/admin/offers.php?error=invoice_create');
+            }
+        }
+    } else {
+        redirect('/admin/offers.php?error=csrf');
+    }
+}
+
 $success = $_GET['success'] ?? '';
 $error = $_GET['error'] ?? '';
 
@@ -34,10 +66,11 @@ include PARTIALS_PATH . 'admin-header.php';
             </div>
             <?php endif; ?>
 
+            <!-- Angebotsübersicht -->
             <div class="admin-card">
                 <div class="admin-card-header">
                     <h2 style="font-size: var(--text-xl); margin-bottom: 0;"><?php echo __('admin_offers_title'); ?></h2>
-                    <a href="/admin/dashboard.php" class="btn btn-dark btn-sm"><?php echo __('admin_back_to_dashboard'); ?></a>
+                    <a href="/admin/create-offer.php" class="btn btn-primary"><?php echo __('admin_create_offer_manual_button'); ?></a>
                 </div>
                 <div class="admin-card-body">
                     <?php if (!empty($offers)): ?>
@@ -55,7 +88,7 @@ include PARTIALS_PATH . 'admin-header.php';
                             </thead>
                             <tbody>
                                 <?php foreach ($offers as $offer): ?>
-                                <tr>
+                                <tr id="offer-<?php echo e($offer['id']); ?>" class="offer-row<?php echo (!empty($_GET['highlight_offer']) && $_GET['highlight_offer'] === $offer['id']) ? ' offer-row-highlight' : ''; ?>">
                                     <td><strong><?php echo e($offer['offer_number']); ?></strong></td>
                                     <td>
                                         <?php echo e(trim(($offer['firstname'] ?? '') . ' ' . ($offer['lastname'] ?? ''))); ?><br>
@@ -82,11 +115,33 @@ include PARTIALS_PATH . 'admin-header.php';
                                         <div class="admin-actions">
                                             <?php if (!empty($offer['pdf_path']) && file_exists($offer['pdf_path'])): ?>
                                             <a href="<?php echo e(PDF_UPLOAD_URL . 'offers/' . basename($offer['pdf_path'])); ?>" target="_blank" class="admin-btn admin-btn-edit"><?php echo __('admin_view_pdf'); ?></a>
+                                            <a href="<?php echo e(PDF_UPLOAD_URL . 'offers/' . basename($offer['pdf_path'])); ?>" download class="admin-btn admin-btn-edit"><?php echo __('admin_download_pdf'); ?></a>
                                             <?php endif; ?>
                                             <?php if ($offer['status'] === 'pending'): ?>
                                             <a href="<?php echo e(rtrim(BASE_URL, '/') . '/offer.php?token=' . $offer['token']); ?>" target="_blank" class="admin-btn admin-btn-edit">Link</a>
                                             <?php endif; ?>
+                                            <?php
+                                            $offerInvoice = ($offer['status'] === 'accepted') ? getInvoiceByOfferId($offer['id']) : null;
+                                            ?>
+                                            <?php if ($offer['status'] === 'accepted' && !$offerInvoice): ?>
+                                            <form method="POST" action="" style="display: inline;">
+                                                <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
+                                                <input type="hidden" name="offer_id" value="<?php echo e($offer['id']); ?>">
+                                                <input type="hidden" name="action" value="create_invoice">
+                                                <button type="submit" class="admin-btn admin-btn-invoice" style="border: none; cursor: pointer;" onclick="return confirm('<?php echo e(__('admin_create_invoice_confirm')); ?>')"><?php echo __('admin_create_invoice'); ?></button>
+                                            </form>
+                                            <?php elseif ($offerInvoice && !empty($offerInvoice['pdf_path']) && file_exists($offerInvoice['pdf_path'])): ?>
+                                            <a href="<?php echo e(PDF_UPLOAD_URL . 'invoices/' . basename($offerInvoice['pdf_path'])); ?>" target="_blank" class="admin-btn admin-btn-edit"><?php echo __('admin_view_invoice_pdf'); ?></a>
+                                            <?php endif; ?>
+                                            <?php if ($offer['status'] === 'accepted' && !empty($offer['signature'])): ?>
+                                            <button type="button" class="admin-btn admin-btn-edit" onclick="document.getElementById('signature-preview-<?php echo e($offer['id']); ?>').style.display = document.getElementById('signature-preview-<?php echo e($offer['id']); ?>').style.display === 'none' ? 'block' : 'none';"><?php echo e(__('admin_show_signature')); ?></button>
+                                            <?php endif; ?>
                                         </div>
+                                        <?php if ($offer['status'] === 'accepted' && !empty($offer['signature'])): ?>
+                                        <div id="signature-preview-<?php echo e($offer['id']); ?>" style="display: none; margin-top: var(--space-3);">
+                                            <img src="<?php echo e($offer['signature']); ?>" alt="<?php echo e(__('admin_signature_alt')); ?>" style="max-width: 200px; max-height: 80px; border: 1px solid var(--color-gray-300); border-radius: var(--radius-sm); background: #fff;">
+                                        </div>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
@@ -100,5 +155,21 @@ include PARTIALS_PATH . 'admin-header.php';
                     <?php endif; ?>
                 </div>
             </div>
+
+<script>
+(function() {
+    var urlParams = new URLSearchParams(window.location.search);
+    var highlightOfferId = urlParams.get('highlight_offer');
+    if (highlightOfferId) {
+        var row = document.getElementById('offer-' + highlightOfferId);
+        if (row) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(function() {
+                row.classList.add('offer-row-highlight');
+            }, 200);
+        }
+    }
+})();
+</script>
 
 <?php include PARTIALS_PATH . 'admin-footer.php'; ?>

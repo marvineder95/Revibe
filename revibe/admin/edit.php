@@ -26,51 +26,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateCsrfToken($_POST['csrf_token'] ?? '')) {
         $error = 'Sicherheitsfehler. Bitte laden Sie die Seite neu.';
     } else {
-        // Hauptbild upload (nur wenn neues Bild hochgeladen)
-        $mainImage = $jukebox['main_image'];
-        if (!empty($_FILES['main_image']['tmp_name'])) {
-            $result = uploadImage($_FILES['main_image']);
-            if ($result['success']) {
-                // Altes Bild löschen
-                if ($mainImage) deleteImage($mainImage);
-                $mainImage = $result['filename'];
-            } else {
-                $error = $result['error'];
+        // Bilder verarbeiten
+        $orderedImages = [];
+        $uploadErrors = [];
+        $imageOrder = isset($_POST['image_order']) && is_array($_POST['image_order']) ? $_POST['image_order'] : [];
+
+        // Neue Dateien indizieren
+        $newFiles = [];
+        if (isset($_FILES['new_images']) && is_array($_FILES['new_images']['tmp_name'])) {
+            $fileCount = count($_FILES['new_images']['tmp_name']);
+            for ($i = 0; $i < $fileCount; $i++) {
+                if ($_FILES['new_images']['error'][$i] !== UPLOAD_ERR_OK) {
+                    continue;
+                }
+                $newFiles[$i] = [
+                    'tmp_name' => $_FILES['new_images']['tmp_name'][$i],
+                    'name' => $_FILES['new_images']['name'][$i],
+                    'type' => $_FILES['new_images']['type'][$i],
+                    'size' => $_FILES['new_images']['size'][$i]
+                ];
             }
         }
-        
-        // Galerie-Bilder upload
-        $galleryImages = $jukebox['gallery_images'] ?? [];
-        if (isset($_FILES['gallery_images']) && is_array($_FILES['gallery_images']['tmp_name'])) {
-            $fileCount = count($_FILES['gallery_images']['tmp_name']);
-            for ($i = 0; $i < $fileCount; $i++) {
-                $tmpName = $_FILES['gallery_images']['tmp_name'][$i];
-                if (!empty($tmpName) && $_FILES['gallery_images']['error'][$i] === UPLOAD_ERR_OK) {
-                    $file = [
-                        'tmp_name' => $tmpName,
-                        'name' => $_FILES['gallery_images']['name'][$i],
-                        'type' => $_FILES['gallery_images']['type'][$i],
-                        'size' => $_FILES['gallery_images']['size'][$i]
-                    ];
-                    $result = uploadImage($file);
-                    if ($result['success']) {
-                        $galleryImages[] = $result['filename'];
-                    }
+
+        foreach ($imageOrder as $orderValue) {
+            if (strpos($orderValue, 'new:') === 0) {
+                $idx = (int) substr($orderValue, 4);
+                if (!isset($newFiles[$idx])) {
+                    continue;
+                }
+                $file = $newFiles[$idx];
+                $result = uploadImage($file);
+                if ($result['success']) {
+                    $orderedImages[] = $result['filename'];
+                } else {
+                    $uploadErrors[] = "'" . $file['name'] . "': " . $result['error'];
+                }
+            } elseif (!empty($orderValue)) {
+                $img = sanitizeImageFilename($orderValue);
+                if ($img) {
+                    $orderedImages[] = $img;
                 }
             }
         }
-        
-        // Zu löschende Galeriebilder entfernen
-        $imagesToDelete = isset($_POST['delete_gallery_images']) && is_array($_POST['delete_gallery_images']) 
-            ? $_POST['delete_gallery_images'] 
-            : [];
-        foreach ($imagesToDelete as $img) {
-            $img = sanitizeImageFilename($img);
-            if ($img && in_array($img, $jukebox['gallery_images'] ?? [], true)) {
-                deleteImage($img);
-                $galleryImages = array_diff($galleryImages, [$img]);
+
+        // Bilder löschen, die nicht mehr in der Reihenfolge vorkommen
+        $oldImages = array_filter(array_merge([$jukebox['main_image'] ?? ''], $jukebox['gallery_images'] ?? []));
+        $keptImages = array_filter($orderedImages);
+        foreach ($oldImages as $oldImg) {
+            if (!in_array($oldImg, $keptImages, true)) {
+                deleteImage($oldImg);
             }
         }
+
+        // Upload-Fehler anzeigen
+        if (!empty($uploadErrors)) {
+            $error = 'Upload-Fehler:<br>' . implode('<br>', $uploadErrors);
+        }
+
+        $mainImage = $orderedImages[0] ?? '';
+        $galleryImages = array_values(array_slice($orderedImages, 1));
         
         if (!$error) {
             // Jukebox-Daten
@@ -93,6 +107,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'power_connection_en' => $_POST['power_connection_en'] ?? '',
                 'dimensions' => $_POST['dimensions'] ?? '',
                 'dimensions_en' => $_POST['dimensions_en'] ?? '',
+                'equipment' => $_POST['equipment'] ?? '',
+                'equipment_en' => $_POST['equipment_en'] ?? '',
+                'weight' => $_POST['weight'] ?? null,
+                'warehouse_address' => $_POST['warehouse_address'] ?? '',
                 'price_day' => $_POST['price_day'] ?? 0,
                 'featured' => isset($_POST['featured']) ? true : false,
                 'order' => $_POST['order'] ?? 0,
@@ -100,6 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'size' => $_POST['size'] ?? '',
                 'color' => $_POST['color'] ?? '',
                 'new_arrival' => isset($_POST['new_arrival']) ? true : false,
+                'tags' => $_POST['tags'] ?? [],
                 'main_image' => $mainImage,
                 'gallery_images' => array_values($galleryImages),
                 'created_at' => $jukebox['created_at']
@@ -288,54 +307,212 @@ include PARTIALS_PATH . 'admin-header.php';
                                         <input type="text" name="dimensions_en" class="form-input" value="<?php echo e($jukebox['dimensions_en'] ?? ''); ?>">
                                     </div>
                                     <div class="form-group">
+                                        <label class="form-label">Gewicht (kg)</label>
+                                        <input type="number" name="weight" class="form-input" min="0" step="0.1" value="<?php echo e($jukebox['weight'] ?? ''); ?>" placeholder="z.B. 85">
+                                    </div>
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">Bestückung (DE)</label>
+                                        <input type="text" name="equipment" class="form-input" value="<?php echo e($jukebox['equipment'] ?? ''); ?>" placeholder="z.B. 100 CDs, 7 Vinyl-Singles, Bluetooth">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Bestückung (EN)</label>
+                                        <input type="text" name="equipment_en" class="form-input" value="<?php echo e($jukebox['equipment_en'] ?? ''); ?>" placeholder="z.B. 100 CDs, 7 vinyl singles, Bluetooth">
+                                    </div>
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">Lageradresse</label>
+                                        <input type="text" name="warehouse_address" class="form-input" value="<?php echo e($jukebox['warehouse_address'] ?? WAREHOUSE_ADDRESS_DEFAULT); ?>" placeholder="z.B. Oberstdorfer Straße 5, 2201 Seyring, Österreich">
+                                    </div>
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
                                         <label class="form-label">Sortierung</label>
                                         <input type="number" name="order" class="form-input" value="<?php echo e($jukebox['order'] ?? 0); ?>" min="0">
                                     </div>
                                 </div>
                             </div>
                             
+                            <!-- Tags -->
+                            <div>
+                                <h3 style="margin-bottom: var(--space-4); color: var(--color-primary);"><?php echo __('admin_tags'); ?></h3>
+                                <div class="admin-tags-selection">
+                                    <?php foreach (JUKEBOX_TAGS as $tagKey => $tagConfig): ?>
+                                    <label class="form-checkbox admin-tag-checkbox admin-tag-checkbox-<?php echo e($tagConfig['color']); ?>">
+                                        <input type="checkbox" name="tags[]" value="<?php echo e($tagKey); ?>" <?php echo in_array($tagKey, $jukebox['tags'] ?? [], true) ? 'checked' : ''; ?>>
+                                        <span><?php echo e(getJukeboxTagLabel($tagKey)); ?></span>
+                                    </label>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                            
                             <!-- Bilder -->
                             <div>
                                 <h3 style="margin-bottom: var(--space-4); color: var(--color-primary);">Bilder</h3>
-                                
-                                <!-- Aktuelles Hauptbild -->
-                                <?php if ($jukebox['main_image']): ?>
-                                <div class="form-group">
-                                    <label class="form-label">Aktuelles Hauptbild</label>
-                                    <div style="max-width: 200px;">
-                                        <img src="<?php echo e(getJukeboxImageUrl($jukebox['main_image'])); ?>" alt="" style="width: 100%; border-radius: var(--radius-md);">
+                                <div class="admin-image-manager">
+                                    <div class="admin-image-upload">
+                                        <label class="form-label" style="cursor: pointer; margin-bottom: 0;">
+                                            <span>Weitere Bilder auswählen</span>
+                                            <input type="file" name="new_images[]" id="new-images-input" class="form-input" accept="image/*" multiple style="display: none;">
+                                        </label>
+                                        <p style="color: var(--color-text-muted); font-size: var(--text-sm); margin-top: var(--space-2); margin-bottom: 0;">Bilder per Drag & Drop sortieren. Das erste Bild wird automatisch zum Hauptbild.</p>
                                     </div>
-                                </div>
-                                <?php endif; ?>
-                                
-                                <div class="form-group">
-                                    <label class="form-label">Neues Hauptbild (optional)</label>
-                                    <input type="file" name="main_image" class="form-input" accept="image/*">
-                                </div>
-                                
-                                <!-- Aktuelle Galeriebilder -->
-                                <?php if (!empty($jukebox['gallery_images'])): ?>
-                                <div class="form-group">
-                                    <label class="form-label">Aktuelle Galeriebilder</label>
-                                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2);">
-                                        <?php foreach ($jukebox['gallery_images'] as $img): ?>
-                                        <div style="position: relative;">
-                                            <img src="<?php echo e(getJukeboxImageUrl($img)); ?>" alt="" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius-md);">
-                                            <label style="position: absolute; top: var(--space-1); right: var(--space-1); padding: var(--space-1) var(--space-2); background: rgba(239, 68, 68, 0.9); color: white; font-size: 10px; border-radius: var(--radius-sm); cursor: pointer;">
-                                                <input type="checkbox" name="delete_gallery_images[]" value="<?php echo e($img); ?>" style="display: none;">
-                                                Löschen
-                                            </label>
+                                    <div id="admin-image-list" class="admin-image-grid">
+                                        <?php
+                                        $allImages = [];
+                                        if (!empty($jukebox['main_image'])) {
+                                            $allImages[] = $jukebox['main_image'];
+                                        }
+                                        if (!empty($jukebox['gallery_images'])) {
+                                            $allImages = array_merge($allImages, $jukebox['gallery_images']);
+                                        }
+                                        foreach ($allImages as $index => $img):
+                                        ?>
+                                        <div class="admin-image-item <?php echo $index === 0 ? 'is-main' : ''; ?>" draggable="true" data-existing="<?php echo e($img); ?>">
+                                            <img src="<?php echo e(getJukeboxImageUrl($img)); ?>" alt="">
+                                            <button type="button" class="admin-image-delete" aria-label="Entfernen">&times;</button>
+                                            <input type="hidden" name="image_order[]" class="admin-image-order-input" value="<?php echo e($img); ?>">
                                         </div>
                                         <?php endforeach; ?>
                                     </div>
                                 </div>
-                                <?php endif; ?>
-                                
-                                <div class="form-group">
-                                    <label class="form-label">Neue Galeriebilder hinzufügen</label>
-                                    <input type="file" name="gallery_images[]" class="form-input" accept="image/*" multiple>
-                                </div>
                             </div>
+
+                            <script>
+                            (function() {
+                                var input = document.getElementById('new-images-input');
+                                var list = document.getElementById('admin-image-list');
+                                var form = input.closest('form');
+                                var fileMap = {};
+                                var nextIndex = 0;
+
+                                function updateMainState() {
+                                    var items = list.querySelectorAll('.admin-image-item');
+                                    items.forEach(function(item, index) {
+                                        item.classList.toggle('is-main', index === 0);
+                                    });
+                                }
+
+                                function updateOrderInputs() {
+                                    list.querySelectorAll('.admin-image-order-input').forEach(function(el) { el.remove(); });
+                                    var items = list.querySelectorAll('.admin-image-item');
+                                    items.forEach(function(item) {
+                                        var existing = item.getAttribute('data-existing');
+                                        var idx = item.getAttribute('data-file-index');
+                                        var hidden = document.createElement('input');
+                                        hidden.type = 'hidden';
+                                        hidden.name = 'image_order[]';
+                                        hidden.className = 'admin-image-order-input';
+                                        hidden.value = existing ? existing : 'new:' + idx;
+                                        item.appendChild(hidden);
+                                    });
+                                }
+
+                                function createItem(file, index) {
+                                    var div = document.createElement('div');
+                                    div.className = 'admin-image-item';
+                                    div.setAttribute('draggable', 'true');
+                                    div.setAttribute('data-file-index', index);
+                                    var url = URL.createObjectURL(file);
+                                    div.innerHTML = '<img src="' + url + '" alt="">' +
+                                        '<button type="button" class="admin-image-delete" aria-label="Entfernen">&times;</button>';
+                                    div.querySelector('.admin-image-delete').addEventListener('click', function(e) {
+                                        e.stopPropagation();
+                                        div.remove();
+                                        updateMainState();
+                                        updateOrderInputs();
+                                    });
+                                    div.addEventListener('dragstart', function(e) {
+                                        div.classList.add('dragging');
+                                        e.dataTransfer.effectAllowed = 'move';
+                                    });
+                                    div.addEventListener('dragend', function() {
+                                        div.classList.remove('dragging');
+                                        updateOrderInputs();
+                                        updateMainState();
+                                    });
+                                    div.addEventListener('dragover', function(e) {
+                                        e.preventDefault();
+                                        var dragging = list.querySelector('.dragging');
+                                        if (!dragging || dragging === div) return;
+                                        var rect = div.getBoundingClientRect();
+                                        var offsetX = e.clientX - rect.left;
+                                        if (offsetX < rect.width / 2) {
+                                            list.insertBefore(dragging, div);
+                                        } else {
+                                            list.insertBefore(dragging, div.nextSibling);
+                                        }
+                                    });
+                                    return div;
+                                }
+
+                                // Bestehende Items mit Drag & Drop versehen
+                                list.querySelectorAll('.admin-image-item').forEach(function(item) {
+                                    item.querySelector('.admin-image-delete').addEventListener('click', function(e) {
+                                        e.stopPropagation();
+                                        item.remove();
+                                        updateMainState();
+                                        updateOrderInputs();
+                                    });
+                                    item.addEventListener('dragstart', function(e) {
+                                        item.classList.add('dragging');
+                                        e.dataTransfer.effectAllowed = 'move';
+                                    });
+                                    item.addEventListener('dragend', function() {
+                                        item.classList.remove('dragging');
+                                        updateOrderInputs();
+                                        updateMainState();
+                                    });
+                                    item.addEventListener('dragover', function(e) {
+                                        e.preventDefault();
+                                        var dragging = list.querySelector('.dragging');
+                                        if (!dragging || dragging === item) return;
+                                        var rect = item.getBoundingClientRect();
+                                        var offsetX = e.clientX - rect.left;
+                                        if (offsetX < rect.width / 2) {
+                                            list.insertBefore(dragging, item);
+                                        } else {
+                                            list.insertBefore(dragging, item.nextSibling);
+                                        }
+                                    });
+                                });
+
+                                input.addEventListener('change', function() {
+                                    var files = Array.from(input.files);
+                                    files.forEach(function(file) {
+                                        var idx = nextIndex++;
+                                        fileMap[idx] = file;
+                                        list.appendChild(createItem(file, idx));
+                                    });
+                                    input.value = '';
+                                    updateMainState();
+                                    updateOrderInputs();
+                                });
+
+                                form.addEventListener('submit', function() {
+                                    var items = list.querySelectorAll('.admin-image-item[data-file-index]');
+                                    var dt = new DataTransfer();
+                                    items.forEach(function(item, position) {
+                                        var idx = item.getAttribute('data-file-index');
+                                        if (fileMap[idx]) {
+                                            dt.items.add(fileMap[idx]);
+                                            item.setAttribute('data-file-index', position);
+                                        }
+                                    });
+                                    input.files = dt.files;
+                                    updateOrderInputs();
+                                });
+
+                                list.addEventListener('dragover', function(e) { e.preventDefault(); });
+                                updateMainState();
+                                updateOrderInputs();
+                            })();
+                            </script>
                             
                             <!-- Einstellungen -->
                             <div>

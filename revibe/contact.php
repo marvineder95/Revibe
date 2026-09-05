@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     cartSetCoupon($couponCode);
 
     if (!empty($eventAddress)) {
-        $transport = calculateTransportCosts($eventAddress);
+        $transport = calculateTransportCosts($eventAddress, getCartItems());
         if (empty($transport['error'])) {
             cartSetTransportData($transport['distance_km'], $transport['duration_min'], '');
         } else {
@@ -70,7 +70,7 @@ if (!empty($cart['event_address'])) {
     if ($cart['transport_calculated']) {
         $transport['costs'] = computeTransportPrice($cart['transport_distance_km'], $cart['transport_duration_min']);
     } else {
-        $transport = calculateTransportCosts($cart['event_address']);
+        $transport = calculateTransportCosts($cart['event_address'], $cartItems);
         if (empty($transport['error'])) {
             cartSetTransportData($transport['distance_km'], $transport['duration_min'], '');
         } else {
@@ -214,104 +214,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // Reservierungen für alle ausgewählten Jukeboxen anlegen
                         if ($inquiry) {
                             foreach ($cartItems as $jb) {
-                                createRental([
+                                $rental = createRental([
                                     'jukebox_id' => $jb['id'],
                                     'inquiry_id' => $inquiry['id'],
                                     'date_start' => $inquiry['date_start'],
                                     'date_end' => $inquiry['date_end'],
                                     'status' => 'reserved'
                                 ]);
-                            }
-                        }
-
-                        $offerLink = '';
-                        if ($inquiry) {
-                            // 2. Angebots-PDF erstellen (Dummy-Nummer, wird gleich neu generiert)
-                            $offerPdf = generateOfferPdf($inquiry, 'ANG-' . date('Y') . '-00000', '+3 days');
-                            $dummyOfferPdfPath = $offerPdf['path'] ?? null;
-
-                            if ($offerPdf) {
-                                $offer = createOffer($inquiry['id'], $offerPdf['path'], 3);
-
-                                if ($offer) {
-                                    // Reservierungen mit Angebot verknüpfen
-                                    linkRentalsToOffer($inquiry['id'], $offer['id']);
-
-                                    // Angebotsnummer korrigieren und PDF neu generieren
-                                    $offerPdf = generateOfferPdf($inquiry, $offer['offer_number'], $offer['valid_until']);
-                                    if ($offerPdf) {
-                                        // Angebot aktualisieren mit korrektem PDF
-                                        updateOfferPdfPath($offer['id'], $offerPdf['path']);
-                                        $offer['pdf_path'] = $offerPdf['path'];
-                                    }
-
-                                    $offerLink = rtrim(BASE_URL, '/') . '/offer.php?token=' . $offer['token'];
-
-                                    // Altes Dummy-PDF entfernen, falls vorhanden
-                                    if (!empty($dummyOfferPdfPath) && file_exists($dummyOfferPdfPath)) {
-                                        @unlink($dummyOfferPdfPath);
-                                    }
-
-                                    // 3. Angebots-E-Mail an Kunden senden
-                                    $realOfferPdfPath = !empty($offer['pdf_path']) ? realpath($offer['pdf_path']) : false;
-                                    $realPdfBasePath = realpath(PDF_UPLOAD_PATH);
-
-                                    if ($realOfferPdfPath !== false && $realPdfBasePath !== false && strpos($realOfferPdfPath, $realPdfBasePath) === 0 && file_exists($realOfferPdfPath)) {
-                                        $custSubject = __('admin_offer_email_subject', ['company' => COMPANY_NAME]);
-                                        $offerHtmlBody = __('admin_offer_email_body', [
-                                            'name' => $name,
-                                            'offer_link' => $offerLink,
-                                            'valid_until' => date('d.m.Y', strtotime($offer['valid_until'])),
-                                            'company' => COMPANY_NAME
-                                        ]);
-                                        $offerPlainBody = "Hallo {$name},\n\nvielen Dank für Ihre Anfrage. Im Anhang finden Sie Ihr unverbindliches Angebot.\n\nSie können das Angebot online einsehen und annehmen oder ablehnen:\n{$offerLink}\n\nDas Angebot ist gültig bis " . date('d.m.Y', strtotime($offer['valid_until'])) . ".\n\nMit freundlichen Grüßen\n" . COMPANY_NAME . " Team";
-
-                                        $custHeaders = "From: " . MAIL_SENDER . "\r\n";
-                                        $custHeaders .= "Reply-To: " . MAIL_SENDER . "\r\n";
-                                        $custHeaders .= "X-Mailer: PHP/" . phpversion();
-
-                                        $pdfContent = file_get_contents($realOfferPdfPath);
-                                        $pdfEncoded = chunk_split(base64_encode($pdfContent));
-                                        $pdfFilename = basename($realOfferPdfPath);
-
-                                        $outerBoundary = bin2hex(random_bytes(16));
-                                        $innerBoundary = bin2hex(random_bytes(16));
-                                        $custHeaders .= "MIME-Version: 1.0\r\n";
-                                        $custHeaders .= "Content-Type: multipart/mixed; boundary=\"{$outerBoundary}\"\r\n";
-
-                                        $custBodyMime = "--{$outerBoundary}\r\n";
-                                        $custBodyMime .= "Content-Type: multipart/alternative; boundary=\"{$innerBoundary}\"\r\n\r\n";
-
-                                        $custBodyMime .= "--{$innerBoundary}\r\n";
-                                        $custBodyMime .= "Content-Type: text/plain; charset=UTF-8\r\n";
-                                        $custBodyMime .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
-                                        $custBodyMime .= $offerPlainBody . "\r\n\r\n";
-
-                                        $custBodyMime .= "--{$innerBoundary}\r\n";
-                                        $custBodyMime .= "Content-Type: text/html; charset=UTF-8\r\n";
-                                        $custBodyMime .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
-                                        $custBodyMime .= $offerHtmlBody . "\r\n\r\n";
-                                        $custBodyMime .= "--{$innerBoundary}--\r\n\r\n";
-
-                                        $custBodyMime .= "--{$outerBoundary}\r\n";
-                                        $custBodyMime .= "Content-Type: application/pdf; name=\"{$pdfFilename}\"\r\n";
-                                        $custBodyMime .= "Content-Transfer-Encoding: base64\r\n";
-                                        $custBodyMime .= "Content-Disposition: attachment; filename=\"{$pdfFilename}\"\r\n\r\n";
-                                        $custBodyMime .= $pdfEncoded . "\r\n";
-                                        $custBodyMime .= "--{$outerBoundary}--";
-
-                                        $offerMailSent = mail($email, $custSubject, $custBodyMime, $custHeaders);
-                                        if (!$offerMailSent) {
-                                            error_log('Angebots-E-Mail konnte nicht an ' . $email . ' gesendet werden.');
-                                        }
-                                    } else {
-                                        error_log('Angebots-PDF-Pfad ungültig oder nicht lesbar: ' . ($offer['pdf_path'] ?? 'n/a'));
-                                    }
+                                if (!$rental) {
+                                    error_log('Reservierung konnte nicht angelegt werden für Jukebox ' . $jb['id'] . ' / Inquiry ' . $inquiry['id']);
                                 }
                             }
                         }
 
-                        // 4. Warenkorb leeren
+                        // 2. Angebot erstellen, PDF generieren und per E-Mail versenden
+                        if ($inquiry) {
+                            buildAndSendOffer($inquiry['id'], 3);
+                        }
+
+                        // 3. Warenkorb leeren
                         $formSuccess = true;
                         cartClear();
                         clearInquiryList();
@@ -431,7 +352,19 @@ $lang = getCurrentLanguage();
                             </div>
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
-                            <input type="text" name="event_country" class="form-input" placeholder="<?php echo $lang === 'de' ? 'Land' : 'Country'; ?>" value="<?php echo e($eventCountry); ?>">
+                            <?php
+                            $predefinedCountries = ['Österreich', 'Deutschland', 'Tschechien', 'Slowakei', 'Ungarn', 'Slowenien', 'Italien', 'Schweiz', 'Liechtenstein'];
+                            $isOther = $eventCountry !== '' && !in_array($eventCountry, $predefinedCountries, true);
+                            ?>
+                            <select id="eventCountrySelect" class="form-input">
+                                <option value=""><?php echo $lang === 'de' ? 'Land auswählen' : 'Select country'; ?></option>
+                                <?php foreach ($predefinedCountries as $c): ?>
+                                <option value="<?php echo e($c); ?>" <?php echo $eventCountry === $c ? 'selected' : ''; ?>><?php echo e($c); ?></option>
+                                <?php endforeach; ?>
+                                <option value="other" <?php echo $isOther ? 'selected' : ''; ?>><?php echo $lang === 'de' ? 'Sonstiges' : 'Other'; ?></option>
+                            </select>
+                            <input type="text" id="eventCountryOther" class="form-input" style="margin-top: var(--space-2); <?php echo $isOther ? '' : 'display: none;'; ?>" placeholder="<?php echo $lang === 'de' ? 'Land eingeben' : 'Enter country'; ?>" value="<?php echo e($isOther ? $eventCountry : ''); ?>">
+                            <input type="hidden" name="event_country" id="eventCountryHidden" value="<?php echo e($eventCountry); ?>">
                         </div>
                         <?php if ($_SERVER['REQUEST_METHOD'] !== 'POST' && !empty($cart['event_address'])): ?>
                         <p style="font-size: var(--text-xs); color: var(--color-gray-500); margin-top: var(--space-2); margin-bottom: 0;">
@@ -479,15 +412,14 @@ $lang = getCurrentLanguage();
                         <input type="text" name="company" class="form-input" value="<?php echo e($_POST['company'] ?? ''); ?>">
                     </div>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label"><?php echo __('form_email'); ?> *</label>
-                            <input type="email" name="email" class="form-input" required value="<?php echo e($_POST['email'] ?? ''); ?>">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label"><?php echo __('form_phone'); ?> *</label>
-                            <input type="tel" name="phone" class="form-input" required value="<?php echo e($_POST['phone'] ?? ''); ?>">
-                        </div>
+                    <div class="form-group">
+                        <label class="form-label"><?php echo __('form_email'); ?></label>
+                        <input type="email" name="email" class="form-input" required value="<?php echo e($_POST['email'] ?? ''); ?>">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label"><?php echo __('form_phone'); ?></label>
+                        <input type="tel" name="phone" class="form-input" required value="<?php echo e($_POST['phone'] ?? ''); ?>">
                     </div>
 
                     <div class="form-group">
@@ -502,24 +434,26 @@ $lang = getCurrentLanguage();
                         </label>
                     </div>
 
-                    <?php if (!empty($cartItems) && !$cartAvailability['available']): ?>
-                    <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-4); color: var(--color-error, #ef4444); font-size: var(--text-sm);">
-                        <strong><?php echo __('cart_item_not_available'); ?></strong>
-                        <?php foreach ($cartAvailability['conflicts'] as $jukeboxId => $conflicts): ?>
-                            <?php foreach ($conflicts as $conflict): ?>
-                            <div style="margin-top: var(--space-1);">
-                                <?php echo __('cart_item_not_available_period', [
-                                    'name' => e(getLocalizedValue(getJukeboxById($jukeboxId), 'name')),
-                                    'start' => date('d.m.Y', strtotime($conflict['date_start'])),
-                                    'end' => date('d.m.Y', strtotime($conflict['date_end']))
-                                ]); ?>
-                            </div>
-                            <?php endforeach; ?>
-                        <?php endforeach; ?>
+                    <div id="availability-warning" style="display: <?php echo (!empty($cartItems) && !$cartAvailability['available']) ? 'block' : 'none'; ?>; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-4); color: var(--color-error, #ef4444); font-size: var(--text-sm);">
+                        <strong id="availability-warning-title"><?php echo __('cart_item_not_available'); ?></strong>
+                        <div id="availability-warning-details">
+                            <?php if (!empty($cartItems) && !$cartAvailability['available']): ?>
+                                <?php foreach ($cartAvailability['conflicts'] as $jukeboxId => $conflicts): ?>
+                                    <?php foreach ($conflicts as $conflict): ?>
+                                    <div style="margin-top: var(--space-1);">
+                                        <?php echo __('cart_item_not_available_period', [
+                                            'name' => e(getLocalizedValue(getJukeboxById($jukeboxId), 'name')),
+                                            'start' => date('d.m.Y', strtotime($conflict['date_start'])),
+                                            'end' => date('d.m.Y', strtotime($conflict['date_end']))
+                                        ]); ?>
+                                    </div>
+                                    <?php endforeach; ?>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
                     </div>
-                    <?php endif; ?>
 
-                    <button type="submit" class="btn btn-primary btn-lg" style="margin-top: var(--space-2); min-width: 260px;" <?php echo (!empty($cartItems) && !$cartAvailability['available']) ? 'disabled' : ''; ?>>
+                    <button type="submit" id="submit-inquiry" class="btn btn-primary btn-lg" style="margin-top: var(--space-2); min-width: 260px;" <?php echo (!empty($cartItems) && !$cartAvailability['available']) ? 'disabled' : ''; ?>>
                         <?php echo __('form_submit'); ?>
                     </button>
 
@@ -620,10 +554,37 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
-                    if (data.success && container) {
-                        container.innerHTML = '<h3 style="font-size: var(--text-lg); margin-bottom: var(--space-3);">' + (lang === 'de' ? 'Kostenübersicht' : 'Cost Overview') + '</h3>' + data.pricingHtml;
-                        if (typeof data.available !== 'undefined' && !data.available) {
-                            window.location.reload();
+                    if (data.success) {
+                        if (container) {
+                            container.innerHTML = '<h3 style="font-size: var(--text-lg); margin-bottom: var(--space-3);">' + (lang === 'de' ? 'Kostenübersicht' : 'Cost Overview') + '</h3>' + data.pricingHtml;
+                        }
+
+                        // Verfügbarkeitswarnung dynamisch aktualisieren
+                        var warning = document.getElementById('availability-warning');
+                        var warningDetails = document.getElementById('availability-warning-details');
+                        var submitBtn = document.getElementById('submit-inquiry');
+
+                        if (warning && typeof data.available !== 'undefined') {
+                            if (data.available) {
+                                warning.style.display = 'none';
+                                if (warningDetails) warningDetails.innerHTML = '';
+                                if (submitBtn) submitBtn.disabled = false;
+                            } else {
+                                warning.style.display = 'block';
+                                var detailsHtml = '';
+                                if (data.availabilityDetails && data.availabilityDetails.length) {
+                                    data.availabilityDetails.forEach(function(item) {
+                                        detailsHtml += '<div style="margin-top: var(--space-1);">' +
+                                            (lang === 'de' ? 'Nicht verfügbar: ' : 'Not available: ') +
+                                            item.name + ' (' + item.start + ' - ' + item.end + ')' +
+                                            '</div>';
+                                    });
+                                } else if (data.availabilityMessage) {
+                                    detailsHtml = '<div style="margin-top: var(--space-1);">' + data.availabilityMessage + '</div>';
+                                }
+                                if (warningDetails) warningDetails.innerHTML = detailsHtml;
+                                if (submitBtn) submitBtn.disabled = true;
+                            }
                         }
                     }
                 })
@@ -632,6 +593,35 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
         }, 800);
     }
+
+    // Land-Dropdown mit Sonstiges-Logik
+    var countrySelect = document.getElementById('eventCountrySelect');
+    var countryOther = document.getElementById('eventCountryOther');
+    var countryHidden = document.getElementById('eventCountryHidden');
+
+    function updateCountryHidden() {
+        if (!countrySelect || !countryHidden) return;
+        if (countrySelect.value === 'other') {
+            if (countryOther) countryOther.style.display = 'block';
+            countryHidden.value = countryOther ? countryOther.value : '';
+        } else {
+            if (countryOther) {
+                countryOther.style.display = 'none';
+                countryOther.value = '';
+            }
+            countryHidden.value = countrySelect.value;
+        }
+        triggerPricingUpdate();
+    }
+
+    if (countrySelect) {
+        countrySelect.addEventListener('change', updateCountryHidden);
+    }
+    if (countryOther) {
+        countryOther.addEventListener('input', updateCountryHidden);
+        countryOther.addEventListener('change', updateCountryHidden);
+    }
+    updateCountryHidden();
 
     // Listener auf allen relevanten Feldern
     ['event_street', 'event_housenumber', 'event_zip', 'event_city', 'event_country', 'coupon_code'].forEach(function(name) {

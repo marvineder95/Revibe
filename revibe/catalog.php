@@ -27,16 +27,25 @@ $filters = [
     'manufacturer' => $_GET['manufacturer'] ?? [],
     'function_status' => $_GET['function_status'] ?? [],
     'category_id' => $_GET['category_id'] ?? [],
+    'tags' => $_GET['tags'] ?? [],
     'new_arrival' => !empty($_GET['new_arrival']),
     'price_min' => $_GET['price_min'] ?? '',
     'price_max' => $_GET['price_max'] ?? ''
 ];
 
 // Arrays normalisieren
-foreach (['size', 'color', 'manufacturer', 'function_status', 'category_id'] as $key) {
+foreach (['size', 'color', 'manufacturer', 'function_status', 'category_id', 'tags'] as $key) {
     $filters[$key] = array_filter((array)$filters[$key], function($v) {
         return $v !== '' && $v !== null;
     });
+}
+
+// Tags auf bekannte Werte begrenzen, damit active-Chips und Reset korrekt funktionieren
+if (!empty($filters['tags'])) {
+    $filters['tags'] = array_filter($filters['tags'], function ($tag) {
+        return array_key_exists($tag, JUKEBOX_TAGS);
+    });
+    $filters['tags'] = array_values($filters['tags']);
 }
 
 // Preisfilter validieren: max muss größer als min sein
@@ -60,6 +69,25 @@ $priceRange = getPriceRange();
 // Jukeboxen laden
 $jukeboxes = getAllJukeboxes($sort, $order, $filters);
 
+// Nach Verfügbarkeit im gewählten Mietzeitraum filtern
+$cart = getCart();
+$hasRentalDates = !empty($cart['date_start']) && !empty($cart['date_end']);
+$hiddenByAvailability = 0;
+
+if ($hasRentalDates) {
+    $availableJukeboxes = [];
+    foreach ($jukeboxes as $jb) {
+        if (isJukeboxAvailable($jb['id'], $cart['date_start'], $cart['date_end'])) {
+            $availableJukeboxes[] = $jb;
+        } else {
+            $hiddenByAvailability++;
+        }
+    }
+    $jukeboxes = $availableJukeboxes;
+}
+
+$totalResults = count($jukeboxes);
+
 // Hilfsfunktion: prüft ob ein Filterwert aktiv ist
 function isFilterActive($type, $value) {
     global $filters;
@@ -67,7 +95,7 @@ function isFilterActive($type, $value) {
 }
 
 $hasActiveFilters = !empty($filters['size']) || !empty($filters['color']) || !empty($filters['manufacturer'])
-    || !empty($filters['function_status']) || !empty($filters['category_id']) || !empty($filters['new_arrival'])
+    || !empty($filters['function_status']) || !empty($filters['category_id']) || !empty($filters['tags']) || !empty($filters['new_arrival'])
     || $filters['price_min'] !== '' || $filters['price_max'] !== '';
 
 include PARTIALS_PATH . 'header.php';
@@ -216,6 +244,31 @@ include PARTIALS_PATH . 'header.php';
                     </div>
                     <?php endif; ?>
 
+                    <!-- Tags -->
+                    <div class="filter-pill" data-filter="tags">
+                        <button type="button" class="filter-pill-toggle">
+                            <?php echo __('catalog_filter_tags'); ?>
+                            <?php if (!empty($filters['tags'])): ?>
+                            <span class="filter-pill-count"><?php echo count($filters['tags']); ?></span>
+                            <?php endif; ?>
+                            <svg class="filter-pill-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                        <div class="filter-pill-dropdown filter-pill-dropdown-wide">
+                            <?php foreach (JUKEBOX_TAGS as $tagKey => $tagConfig): ?>
+                            <label class="filter-option filter-option-tag filter-option-tag-<?php echo e($tagConfig['color']); ?>">
+                                <input type="checkbox" name="tags[]" value="<?php echo e($tagKey); ?>" <?php echo isFilterActive('tags', $tagKey) ? 'checked' : ''; ?>>
+                                <span class="filter-option-check"></span>
+                                <span class="filter-option-label"><?php echo e(getJukeboxTagLabel($tagKey)); ?></span>
+                            </label>
+                            <?php endforeach; ?>
+                            <div class="filter-pill-actions">
+                                <button type="submit" class="btn btn-primary btn-sm"><?php echo __('catalog_filter_apply'); ?></button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Preis -->
                     <div class="filter-pill" data-filter="price">
                         <button type="button" class="filter-pill-toggle">
@@ -258,10 +311,14 @@ include PARTIALS_PATH . 'header.php';
                 </a>
                 <?php endif; ?>
 
-                <span class="catalog-results-count">
-                    <?php echo str_replace('{count}', (string)count($jukeboxes), __('catalog_results_count')); ?>
-                </span>
+                <?php $dsShowModal = true; $dsCompact = true; include PARTIALS_PATH . 'date-selector.php'; ?>
             </div>
+
+            <?php if ($hasRentalDates && $hiddenByAvailability > 0): ?>
+            <div class="catalog-availability-hint reveal">
+                <?php echo str_replace('{count}', (string)$hiddenByAvailability, $hiddenByAvailability === 1 ? __('catalog_availability_hidden_one') : __('catalog_availability_hidden')); ?>
+            </div>
+            <?php endif; ?>
 
             <!-- Aktive Filter Chips -->
             <?php if ($hasActiveFilters): ?>
@@ -283,6 +340,9 @@ include PARTIALS_PATH . 'header.php';
                 foreach ($filters['category_id'] as $catId) {
                     $cat = getCategoryById($catId);
                     $activeChips[] = ['type' => 'category_id', 'value' => $catId, 'label' => $cat ? getCategoryName($cat) : $catId];
+                }
+                foreach ($filters['tags'] as $tag) {
+                    $activeChips[] = ['type' => 'tags', 'value' => $tag, 'label' => getJukeboxTagLabel($tag)];
                 }
                 if (!empty($filters['new_arrival'])) {
                     $activeChips[] = ['type' => 'new_arrival', 'value' => '1', 'label' => __('catalog_filter_new_arrival')];
@@ -312,7 +372,6 @@ include PARTIALS_PATH . 'header.php';
         </form>
 
         <?php if (!empty($jukeboxes)): ?>
-        <?php $dsShowModal = true; include PARTIALS_PATH . 'date-selector.php'; ?>
         <div class="jukebox-grid">
             <?php foreach ($jukeboxes as $jukebox): ?>
             <article class="jukebox-card reveal">
@@ -323,7 +382,10 @@ include PARTIALS_PATH . 'header.php';
                     <?php if (!empty($jukebox['new_arrival'])): ?>
                     <span class="jukebox-card-badge jukebox-card-badge-new"><?php echo __('catalog_filter_new_arrival'); ?></span>
                     <?php elseif (!empty($jukebox['featured'])): ?>
-                    <span class="jukebox-card-badge">Highlight</span>
+                    <span class="jukebox-card-badge jukebox-card-badge-highlight">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        Highlight
+                    </span>
                     <?php endif; ?>
                     <?php
                     $cat = getCategoryById($jukebox['category_id'] ?? '');
@@ -341,7 +403,13 @@ include PARTIALS_PATH . 'header.php';
                     <div class="jukebox-card-header">
                         <div>
                             <h3 class="jukebox-card-title"><?php echo e(getLocalizedValue($jukebox, 'name')); ?></h3>
-                            <p class="jukebox-card-subtitle"><?php echo e($jukebox['manufacturer']); ?> <?php echo e($jukebox['model']); ?></p>
+                            <?php if (!empty($jukebox['tags'])): ?>
+                            <div class="jukebox-card-tags">
+                                <?php foreach ($jukebox['tags'] as $tag): ?>
+                                <?php echo renderJukeboxTag($tag); ?>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php endif; ?>
                         </div>
                         <div class="jukebox-card-price">
                             <?php echo formatPrice($jukebox['price_day']); ?>
@@ -354,11 +422,11 @@ include PARTIALS_PATH . 'header.php';
                         <a href="<?php echo BASE_URL; ?>jukebox.php?id=<?php echo e($jukebox['id']); ?>" class="btn btn-dark btn-sm">
                             <?php echo __('view_details'); ?>
                         </a>
-                        <button class="btn btn-primary btn-sm inquiry-btn"
+                        <button class="btn btn-primary btn-sm inquiry-btn inquiry-btn-compact"
                                 data-jukebox-id="<?php echo e($jukebox['id']); ?>"
-                                data-text-add="<?php echo e(__('add_to_inquiry')); ?>"
+                                data-text-add="<?php echo e(__('add_to_inquiry_short')); ?>"
                                 data-text-remove="<?php echo e(__('remove_from_inquiry')); ?>">
-                            <?php echo __('add_to_inquiry'); ?>
+                            <?php echo __('add_to_inquiry_short'); ?>
                         </button>
                     </div>
                 </div>
@@ -368,9 +436,9 @@ include PARTIALS_PATH . 'header.php';
         <?php else: ?>
         <div class="text-center reveal" style="padding: var(--space-16) 0;">
             <p style="font-size: var(--text-xl); color: var(--color-gray-500);">
-                <?php echo __('catalog_empty'); ?>
+                <?php echo $hasRentalDates && $hiddenByAvailability > 0 ? __('catalog_empty_no_availability') : __('catalog_empty'); ?>
             </p>
-            <?php if ($hasActiveFilters): ?>
+            <?php if ($hasActiveFilters || $hasRentalDates): ?>
             <a href="<?php echo BASE_URL; ?>catalog.php" class="btn btn-primary" style="margin-top: var(--space-4);">
                 <?php echo __('catalog_reset_filters'); ?>
             </a>
